@@ -3,7 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_KEY, LEAGUES, GROUPS, FORMATIONS, MENTALITY } from './config.js';
 import {
   $, $$, esc, money, parseMoney, ovrBadge, grpBadge, teamDot, toast, errText, modal, confirmBox,
-  timeLeft, ago, slots, slotPositions,
+  timeLeft, ago, slots, slotPositions, teamStyle,
 } from './ui.js';
 import { openMatch } from './mac.js';
 import { crestSVG, shirtSVG, dotHTML, kitOf, PATTERNS, CRESTS, SYMBOLS } from './kit.js';
@@ -682,8 +682,17 @@ function assistantReport(f) {
   const oPos = S.standings.findIndex((x) => x.team_id === opp) + 1;
   const diff = ours - theirs;
   const advice = diff >= 4 ? 'Kağıt üstünde üstünüz. Hücum anlayışıyla baskı kurmak mantıklı.' : diff <= -4 ? 'Rakip daha güçlü. Dengeli ya da savunma anlayışıyla kontra arayalım.' : 'Güçler denk; ayrıntılar belirleyecek. Dengeli oynayalım.';
+  // rakibin oyun tarzı ve ona karşı öneri
+  const os = teamStyle(o), L3 = (v, x) => x[v] ?? x[1];
+  const styleTxt = [L3(os.press, ['geride bekleyen', '', 'önde basan']), L3(os.tempo, ['sabırlı', '', 'hızlı ve direkt']), L3(os.width, ['ortadan oynayan', '', 'kanatları kullanan'])].filter(Boolean).join(', ') || 'dengeli';
+  const counter = os.press === 2 ? 'Önde basıyorlar, savunmalarının arkası boş: hızlı tempo ve ara paslar işe yarar.'
+    : os.press === 0 ? 'Geride bekliyorlar: kanatları kullanıp ortalarla zorlayalım, sabırsızlanmayalım.'
+    : os.width === 2 ? 'Kanatlardan çok orta yapıyorlar; dar savunup ceza sahasını kalabalık tutalım.'
+    : os.tempo === 2 ? 'Topu çabuk ileri taşıyorlar; orta sahada basıp pas akışlarını keselim.'
+    : os.tempo === 0 ? 'Topu ayaklarında tutmayı seviyorlar; önde basarak hata yaptırabiliriz.' : '';
   const lines = [
     `<b>${esc(o?.name)}</b> ${esc(o?.formation || '')} oynuyor${oPos ? `, ligde ${oPos}. sırada` : ''}. Form: ${formOf(opp).length ? formHTML(formOf(opp)) : '—'}`,
+    `Oyun tarzı: ${esc(styleTxt)}.${counter ? ` ${counter}` : ''}`,
     `İlk 11 gücü: biz <b>${ours}</b> · onlar <b>${theirs}</b>`,
     key ? `En tehlikeli oyuncuları <b>${esc(key.name)}</b> (${key.ovr}, ${esc(key.positions.split(',')[0])}).` : '',
     inj || ban ? `Kadromuzda ${inj ? `${inj} sakat` : ''}${inj && ban ? ', ' : ''}${ban ? `${ban} cezalı` : ''} oyuncu var.` : 'Sakat ya da cezalı oyuncumuz yok.',

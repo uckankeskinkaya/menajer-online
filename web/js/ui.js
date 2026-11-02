@@ -126,3 +126,16 @@ export function slotPositions(form) {
   });
   return pos;
 }
+
+// takımın oyun tarzı (pres/tempo/genişlik 0-2). Yapay zeka takımında talimat yoksa kimliğinden türetilir;
+// sunucudaki _power ile aynı hesap (019_yz_tarz).
+export function teamStyle(t) {
+  const ins = t?.instr || {};
+  if (ins.press !== undefined) return { press: ins.press, tempo: ins.tempo ?? 1, width: ins.width ?? 1 };
+  if (t?.is_bot && typeof t.id === 'string' && t.id.length >= 36) {
+    let hs = 0; for (let i = 1; i <= 36; i++) hs += t.id.charCodeAt(i - 1) * i;
+    const m = [0, 1, 1, 1, 2];
+    return { press: m[hs % 5], tempo: m[Math.floor(hs / 5) % 5], width: m[Math.floor(hs / 25) % 5] };
+  }
+  return { press: 1, tempo: 1, width: 1 };
+}
