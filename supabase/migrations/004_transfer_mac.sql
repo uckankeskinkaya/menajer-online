@@ -1,5 +1,84 @@
 -- MENAJER ONLINE: transferler (yapay zeka teklif değerlendirme + açık artırma) ve maç motoru
 
+-- ---------- 003 düzeltmeleri ----------
+-- text[] || 'DEF' 'malformed array literal' hatası veriyordu: eleman açıkça text'e çevrildi
+create or replace function public._slots(p_form text) returns text[] language plpgsql immutable set search_path = '' as $$
+declare parts int[] := string_to_array(p_form, '-')::int[]; r text[] := array['GK']; i int; k int;
+begin
+  for i in 1..parts[1] loop r := r || 'DEF'::text; end loop;
+  for k in 2..array_length(parts,1)-1 loop for i in 1..parts[k] loop r := r || 'MID'::text; end loop; end loop;
+  for i in 1..parts[array_length(parts,1)] loop r := r || 'FWD'::text; end loop;
+  return r;
+end $$;
+
+create or replace function public.start_game(p_game uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare g record; s jsonb; t record; tiers text[] := '{}'; poss text[]; k text; i int; n int;
+  ngk int; ndef int; nmid int; nfwd int; lo int; hi int; pid int; lgs text[]; lr int := 0; cnt int; mid_t text; gap int;
+begin
+  select * into g from public.games where id = p_game for update;
+  if g.owner <> auth.uid() then raise exception 'Sadece oda sahibi başlatabilir'; end if;
+  if g.status <> 'lobby' then raise exception 'Oyun zaten başladı'; end if;
+  select count(*) into cnt from public.teams where game_id = p_game;
+  if cnt < 2 then raise exception 'En az 2 takım gerekli'; end if;
+  s := g.settings;
+  select array_agg(x) into lgs from jsonb_array_elements_text(s->'leagues') x;
+  foreach k in array array['S','A','B','C','D'] loop
+    for i in 1..coalesce((s->'squad'->>k)::int, 0) loop tiers := tiers || k; end loop;
+  end loop;
+  n := array_length(tiers, 1);
+  ngk := 2; ndef := round((n - 2) * 0.39); nmid := round((n - 2) * 0.33); nfwd := n - 2 - ndef - nmid;
+  mid_t := tiers[(n + 1) / 2];
+  for t in select * from public.teams where game_id = p_game order by random() loop
+    -- kaleciler: biri orta kademe, biri en alt kademe; kalan kademeler diğer mevkilere rastgele
+    poss := '{}';
+    for i in 1..ndef loop poss := poss || 'DEF'::text; end loop;
+    for i in 1..nmid loop poss := poss || 'MID'::text; end loop;
+    for i in 1..nfwd loop poss := poss || 'FWD'::text; end loop;
+    select array_agg(x order by random()) into poss from unnest(poss) x;
+    declare rest text[] := tiers; tk text; gi int; slot text;
+    begin
+      -- orta ve en alt kademeyi kaleciler için ayır
+      gi := array_position(rest, mid_t); rest := rest[1:gi-1] || rest[gi+1:];
+      gi := array_length(rest,1); tk := rest[gi]; rest := rest[1:gi-1];
+      for i in 0..n-1 loop
+        if i = 0 then slot := 'GK'; k := mid_t;
+        elsif i = 1 then slot := 'GK'; k := tk;
+        else slot := poss[i - 1]; k := rest[i - 1]; end if;
+        lo := (s->'tiers'->k->>0)::int; hi := (s->'tiers'->k->>1)::int;
+        select p.id into pid from public.real_players p
+         where p.grp = slot and p.lg = any(lgs) and p.ovr between lo and hi
+           and not exists (select 1 from public.squads q where q.game_id = p_game and q.player_id = p.id)
+         order by random() limit 1;
+        if pid is null then   -- kademede kalmadıysa en yakın ratingden
+          select p.id into pid from public.real_players p
+           where p.grp = slot and p.lg = any(lgs)
+             and not exists (select 1 from public.squads q where q.game_id = p_game and q.player_id = p.id)
+           order by abs(p.ovr - (lo + hi) / 2), random() limit 1;
+        end if;
+        if pid is not null then
+          insert into public.squads (game_id, player_id, team_id, value)
+          select p_game, p.id, t.id, p.val from public.real_players p where p.id = pid;
+        end if;
+        pid := null;
+      end loop;
+    end;
+    update public.teams set budget = (s->>'start_budget')::bigint, lineup = public._auto_lineup(t.id) where id = t.id;
+  end loop;
+
+  if s->>'format' in ('league','league_cup') then lr := public._gen_league(p_game, (s->>'legs')::int); end if;
+  if s->>'format' in ('cup','league_cup') then
+    gap := greatest(1, lr / greatest(1, ceil(log(2.0, cnt::numeric))::int * (s->>'cup_legs')::int));
+    update public.games set cup = jsonb_build_object('round', 1,
+      'alive', (select jsonb_agg(id) from public.teams where game_id = p_game), 'gap', gap)
+     where id = p_game;
+    perform public._gen_cup_round(p_game, case when lr > 0 then gap else 1 end);
+  end if;
+  update public.games set status = 'active', current_round = 0 where id = p_game;
+  perform public._news(p_game, null, 'start', 'Sezon başladı! Kadrolar dağıtıldı, transfer dönemi açık.');
+end $$;
+
+
 -- ---------- transfer ----------
 -- açık artırması biten / süresi dolan teklifleri sonuçlandır (pg_cron her dakika + istemci de çağırabilir)
 create or replace function public.resolve_transfers() returns int
@@ -43,6 +122,8 @@ language plpgsql security definer set search_path = '' as $$
 declare g record; me uuid := public._my_team(p_game); my record; pl record; own record; ask bigint;
   reserved bigint; top record; mins int; existing record; v_note text;
 begin
+  -- aynı oyuncuya eşzamanlı teklifler sırayla işlensin
+  perform pg_advisory_xact_lock(hashtext(p_game::text || ':' || p_player::text));
   perform public.resolve_transfers();
   select * into g from public.games where id = p_game;
   if me is null then return jsonb_build_object('ok',false,'msg','Bu odada takımın yok'); end if;
@@ -127,6 +208,9 @@ begin
     perform public._news(o.game_id, o.bidder, 'offer', pl.name || ' için teklifin reddedildi');
     return jsonb_build_object('ok',true,'msg','Teklif reddedildi');
   end if;
+  if not exists (select 1 from public.squads where game_id = o.game_id and player_id = o.player_id and team_id = o.seller) then
+    update public.offers set status = 'cancelled', note = 'Oyuncu artık bu takımda değil' where id = o.id;
+    return jsonb_build_object('ok',false,'msg','Oyuncu artık kadronda değil'); end if;
   if (select count(*) from public.squads where team_id = o.seller) <= (g.settings->>'min_squad')::int then
     return jsonb_build_object('ok',false,'msg','Kadron en az ' || (g.settings->>'min_squad') || ' oyuncu olmalı, satamazsın'); end if;
   if (select budget from public.teams where id = o.bidder) < o.amount then
