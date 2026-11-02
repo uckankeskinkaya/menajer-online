@@ -17,7 +17,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 - **Oyuncular:** EA FC 26, 9 lig (ENG ESP GER FRA ITA NED POR TUR BEL), 4.647 oyuncu `real_players`'ta yüklü.
   Veri: `data/build_players.py` (kaynak: github.com/ismailoksuz/EAFC26-DataHub `data/players.csv`). Kalecilerde
   pac/sho/pas/dri/dfn/phy = diving/handling/kicking/reflexes/positioning/speed.
-- **Takımlar kurmaca.** Oda kurulur, arkadaşlar 6 haneli kodla katılır.
+- **Takımlar kurmaca.** Oda kurulur, arkadaşlar 6 haneli kodla katılır. `settings.bots` kadar yapay zeka takımı başlarken eklenir (`teams.is_bot`, `owner` null); teklife anında karar verir. Sezonda ayrılan/çıkarılan menajerin takımı YZ'ye geçer.
 - **Format seçilebilir:** `league` / `cup` / `league_cup`; lig tek/çift devre (`legs`); kupa tek maç/rövanşlı (`cup_legs`, final hep tek maç);
   takım sayısı (`max_teams`); bütçe (`start_budget`). Ayarlar `games.settings`, varsayılanlar `_default_settings()`.
 - **Kadro dağıtımı:** Başlangıçta herkese kademelerden (S 85+, A 80-84, B 75-79, C 70-74, D 60-69) eşit sayıda rastgele oyuncu
@@ -28,7 +28,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
     son dakikadaki teklif süreyi 1 dk uzatır. Bütçe aktif tekliflerle rezerve edilir.
   - Menajerden menajere: değerin altına teklif yapılamaz; karar satıcıda (kabul/ret). Teklif `offer_hours` (24 saat) geçerli.
   - Yapay zekaya satış: değerin %75'i, anında. Kadro sınırı 16-30.
-- **Maçlar sunucuda simüle edilir.** Oda sahibi "sonraki hafta" der (`play_next_round`). Sonuç `fixtures.events` olay listesi
+- **Maçlar sunucuda simüle edilir.** Varsayılan `schedule: auto`: her gün bir hafta, her maçın kendi saati (`fixtures.kickoff_at`, ilk maç `kickoff` 11:00, `gap_min` 10 dk, `tz` Europe/Istanbul); pg_cron her dakika `_auto_tick()` ile saati gelen maçı oynatır. İstemci maçı kickoff'tan itibaren 9 dakika "canlı" oynatır (skor bu sürede gizli). `manual` modda oda sahibi `play_next_round` der ya da herkes `set_ready` olunca oynar. Hazırlık maçı: `comp = 'friendly'`, puan/prim yok. Sonuç `fixtures.events` olay listesi
   (`{m, t: goal|save|miss|yellow, s: h|a, p, a}`) ve `fixtures.stats` olarak kaydedilir. İstemci bunu 2D Canvas'ta kuşbakışı oynatır
   (sonra Three.js ile 3D). Hedef: maç başına ~2.5 gol.
 - **Auth:** e-posta + şifre, kullanıcı adı `raw_user_meta_data.username` → `profiles` (trigger `handle_new_user`).
@@ -43,6 +43,8 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 003_oyun_mantigi | ✅ uygulandı (kullanıcı SQL Editor'den) ve test edildi |
 | 004_transfer_mac | ✅ uygulandı (maç motoru `execute_sql`, transfer+yetkiler kullanıcı SQL Editor'den `supabase/elle/004_kalan.sql`), test edildi |
 | 005_mac_ayari | ✅ uygulandı: gol sabiti 0.25, şut sabiti 0.21 → 560 maçta 2.49 gol/maç |
+| 006_canli_maclar | ✅ kullanıcı SQL Editor'den uyguladı: YZ takımları, saatli otomatik maçlar (`_auto_tick`, pg_cron `auto-matches` her dakika), hazırlık maçı, hazırım, YZ teklifleri, transfer dönemi, oda yönetimi |
+| 007_yz_renkleri | ✅ `execute_sql` ile |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
@@ -60,7 +62,7 @@ Yol haritası: `docs/PLAN.md` (fazlar ve maddeler; her oturum sonunda güncelle)
 
 `real_players` · `profiles` · `games` (code, owner, status lobby/active/finished, settings, current_round, cup) ·
 `teams` (budget, formation, mentality -2..2, lineup int[11]) · `squads` (satır yoksa oyuncu yapay zeka kulübünde) ·
-`offers` (seller null = yapay zeka açık artırması) · `fixtures` (comp league/cup, round, cup_round, leg, tie, hg, ag, pens, winner, events, stats) ·
+`offers` (seller null = yapay zeka açık artırması; bidder null + `ai_club` = YZ kulübünün menajere teklifi) · `fixtures` (comp league/cup, round, cup_round, leg, tie, hg, ag, pens, winner, events, stats) ·
 `news` (team_id null = herkese). Realtime: games, offers, news, fixtures, teams, squads.
 
 ## Çalışma kuralları
@@ -70,6 +72,7 @@ Yol haritası: `docs/PLAN.md` (fazlar ve maddeler; her oturum sonunda güncelle)
 - Supabase MCP `apply_migration`/`execute_sql` kullanıcı onayı ister ve **60 sn** içinde cevap gelmezse zaman aşımına düşer;
   göndermeden önce kullanıcıya haber ver.
 - Denemeleri `execute_sql` ile geri alınan `DO` bloklarında yap (bkz. `sql-test` skill'i), migration'ı en son uygula.
+- Onay gerektiren (delete/drop/revoke/alter) değişiklikleri önce yerel Postgres kopyasında test et: `apt-get install postgresql-16-cron`, initdb, `auth` şeması + `auth.uid()` + `anon/authenticated` rolleri taklidi, 001-00N migration'ları, oyuncuları `data/` veya yüklenen players.json'dan yükle. Sonra dosyayı kullanıcıya Raw bağlantısıyla SQL Editor için ver.
 - Yeni RPC eklerken `rpc-ekle`, maç motoruna dokunurken `mac-motoru` skill'ini izle. Postgres/Supabase işlerinde
   `supabase` ve `supabase-postgres-best-practices` skill'leri geçerli.
 - Şema/fonksiyon değişikliğinden sonra `get_advisors` (security + performance) çalıştır.

@@ -86,12 +86,28 @@ function buildScript(fx, R) {
 }
 
 // ---------------- izleyici ----------------
-export async function openMatch(sb, fid, { teamById, onClose }) {
+export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose }) {
   const root = document.getElementById('match');
   root.innerHTML = `<div class="mwrap"><div class="loading">Maç yükleniyor…</div></div>`;
   root.classList.add('show');
-  const { data: fx, error } = await sb.from('fixtures').select('*').eq('id', fid).maybeSingle();
-  if (error || !fx || !fx.played) { root.innerHTML = `<div class="mwrap"><p>Maç bulunamadı</p><button class="btn" id="mClose">Kapat</button></div>`; document.getElementById('mClose').onclick = close; return; }
+  let closed = false, raf = 0, waitTimer = 0, onResize = null;
+  let fx = null;
+  // maç henüz oynanmadıysa (saati gelmedi / sunucu birazdan oynatacak) bekle
+  for (;;) {
+    const { data, error } = await sb.from('fixtures').select('*').eq('id', fid).maybeSingle();
+    if (closed) return;
+    if (error || !data) { root.innerHTML = `<div class="mwrap"><p>Maç bulunamadı</p><button class="btn" id="mClose">Kapat</button></div>`; document.getElementById('mClose').onclick = close; return; }
+    if (data.played) { fx = data; break; }
+    const H0 = teamById.get(data.home), A0 = teamById.get(data.away);
+    const k = data.kickoff_at ? new Date(data.kickoff_at) : null;
+    root.innerHTML = `<div class="mwrap center"><div class="mhead"><div class="mteam">${teamDot(H0)}<b>${esc(H0?.name)}</b></div><div class="mscore">-</div><div class="mteam r"><b>${esc(A0?.name)}</b>${teamDot(A0)}</div></div>
+      <div class="card"><p>${k && k > Date.now() ? `⏰ Maç <b>${k.toLocaleString('tr-TR', { weekday: 'long', hour: '2-digit', minute: '2-digit' })}</b>'da başlayacak.` : '⚽ Maç başlıyor…'}</p>
+      <p class="muted small">Bu ekran açık kalırsa maç başlayınca canlı yayın kendiliğinden açılır.</p></div>
+      <button class="btn" id="mClose">Kapat</button></div>`;
+    document.getElementById('mClose').onclick = close;
+    await new Promise((r) => (waitTimer = setTimeout(r, k && k - Date.now() > 60000 ? 30000 : 4000)));
+    if (closed) return;
+  }
   const ids = [...(fx.stats?.lh || []), ...(fx.stats?.la || []), ...(fx.events || []).flatMap((e) => [e.p, e.a])].filter(Boolean);
   const names = new Map();
   if (ids.length) {
@@ -99,6 +115,17 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
     data?.forEach((p) => names.set(p.id, p.name));
   }
   const H = teamById.get(fx.home), A = teamById.get(fx.away);
+  // forma renkleri: çimle ya da rakiple karışıyorsa ikinci renge geç
+  const rgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); const n = m ? parseInt(m[1], 16) : 0xcc0000; return [n >> 16, (n >> 8) & 255, n & 255]; };
+  const dist = (a, b) => { const x = rgb(a), y = rgb(b); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
+  const GRASS = '#2f7d32';
+  const kit = (t, other) => {
+    let fill = t?.color1 || '#cc0000', line = t?.color2 || '#ffffff';
+    if (dist(fill, GRASS) < 90 || (other && dist(fill, other) < 90)) [fill, line] = [line, fill];
+    if (dist(fill, GRASS) < 90) fill = '#111111';
+    return { fill, line };
+  };
+  const KH = kit(H), KA = kit(A, KH.fill);
   const nm = (id) => esc(names.get(id) || '?');
   // olay türünü 'ev' alanına taşı; 't' zaman olarak kullanılacak. Şutçunun slotunu bul.
   const events = (fx.events || []).map((e) => {
@@ -106,6 +133,8 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
     const slot = lu.indexOf(e.p);
     return { m: e.m, s: e.s, p: e.p, a: e.a, ev: e.t, slot: slot > 0 ? slot : undefined };
   });
+  const startedAgo = fx.kickoff_at ? Date.now() - new Date(fx.kickoff_at) : Infinity;
+  let live = startedAgo >= 0 && startedAgo < liveMs;
   const R = rng(fid * 2654435761);
   const shotEvents = events.filter((e) => e.ev !== 'yellow');
   const { segs, base, evs } = buildScript({ ...fx, events: shotEvents }, R);
@@ -116,11 +145,11 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
   <div class="mwrap">
     <div class="mhead">
       <div class="mteam">${teamDot(H)}<b>${esc(H?.name)}</b></div>
-      <div class="mscore"><span id="sH">0</span> - <span id="sA">0</span><small id="mMin">0'</small></div>
+      <div class="mscore"><span id="sH">0</span> - <span id="sA">0</span><small id="mMin">0'</small>${live ? '<small class="livebadge" id="mLive">🔴 CANLI</small>' : ''}</div>
       <div class="mteam r"><b>${esc(A?.name)}</b>${teamDot(A)}</div>
     </div>
     <div class="mcanvas"><canvas id="pitchCv"></canvas><div class="mflash" id="mFlash"></div></div>
-    <div class="mctrl">
+    <div class="mctrl ${live ? 'is-live' : ''}">
       <button class="btn sm" id="mPlay">⏸</button>
       <div class="seg sm" id="mSpeed">${[1, 2, 4, 8].map((s) => `<button data-s="${s}" class="${s === 2 ? 'on' : ''}">${s}x</button>`).join('')}</div>
       <button class="btn sm" id="mEnd">Sona atla ⏭</button>
@@ -140,14 +169,17 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
   resize();
+  onResize = resize;
   window.addEventListener('resize', resize);
 
-  let tm = 0, speed = 2, playing = true, last = performance.now(), raf, shown = 0, flashT = 0;
-  const MIN_PER_SEC = 1.0; // 1x: 1 maç dakikası = 1 sn
+  let tm = 0, speed = 2, playing = true, last = performance.now(), shown = 0, flashT = 0;
+  const MIN_PER_SEC = 1.0; // tekrar izlemede 1x: 1 maç dakikası = 1 sn
+  const LIVE_RATE = 95 / (liveMs / 1000); // canlıda gerçek zamana bağlı
+  const liveT = () => Math.min(95, ((Date.now() - new Date(fx.kickoff_at)) / liveMs) * 95);
   const ply = { h: base.h.map((p) => ({ ...p })), a: base.a.map((p) => ({ ...p })) };
   const feed = document.getElementById('mFeed');
   let sh = 0, sa = 0;
-  const live = { shots: [0, 0], on: [0, 0] };
+  const ls = { shots: [0, 0], on: [0, 0] };
 
   function ballAt(t) {
     let s = segs[0];
@@ -157,17 +189,17 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
     return { x: lerp(s.x0, s.x1, e), y: lerp(s.y0, s.y1, e), seg: s, k };
   }
 
-  function emit(e) {
+  function emit(e, silent) {
     let txt = '', cls = '';
     const team = e.s === 'h' ? H : A;
     if (e.ev === 'goal') {
       if (e.s === 'h') sh++; else sa++;
-      live.shots[e.s === 'h' ? 0 : 1]++; live.on[e.s === 'h' ? 0 : 1]++;
+      ls.shots[e.s === 'h' ? 0 : 1]++; ls.on[e.s === 'h' ? 0 : 1]++;
       document.getElementById('sH').textContent = sh; document.getElementById('sA').textContent = sa;
       txt = `⚽ <b>GOL!</b> ${nm(e.p)}${e.a ? ` <small>(asist: ${nm(e.a)})</small>` : ''}`; cls = 'goal';
-      flash(`GOL! ${names.get(e.p) || ''}`, team);
-    } else if (e.ev === 'save') { live.shots[e.s === 'h' ? 0 : 1]++; live.on[e.s === 'h' ? 0 : 1]++; txt = `🧤 Kurtarış! ${nm(e.p)} şutu`; }
-    else if (e.ev === 'miss') { live.shots[e.s === 'h' ? 0 : 1]++; txt = `💨 ${nm(e.p)} auta attı`; }
+      if (!silent) flash(`GOL! ${names.get(e.p) || ''}`, team);
+    } else if (e.ev === 'save') { ls.shots[e.s === 'h' ? 0 : 1]++; ls.on[e.s === 'h' ? 0 : 1]++; txt = `🧤 Kurtarış! ${nm(e.p)} şutu`; }
+    else if (e.ev === 'miss') { ls.shots[e.s === 'h' ? 0 : 1]++; txt = `💨 ${nm(e.p)} auta attı`; }
     else if (e.ev === 'yellow') { txt = `🟨 ${nm(e.p)}`; cls = 'card'; }
     feed.insertAdjacentHTML('afterbegin', `<div class="fe ${cls} ${e.s}"><span class="fm">${Math.min(90, Math.round(e.m))}'</span>${teamDot(team)} ${txt}</div>`);
     statsHtml();
@@ -177,8 +209,8 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
     const p = final ? st.poss || [50, 50] : null;
     document.getElementById('mStats').innerHTML = `
       ${p ? `<div class="srow"><b>${p[0]}%</b><span>Topa sahip olma</span><b>${p[1]}%</b></div>` : ''}
-      <div class="srow"><b>${final ? st.shots?.[0] ?? live.shots[0] : live.shots[0]}</b><span>Şut</span><b>${final ? st.shots?.[1] ?? live.shots[1] : live.shots[1]}</b></div>
-      <div class="srow"><b>${final ? st.on?.[0] ?? live.on[0] : live.on[0]}</b><span>İsabetli şut</span><b>${final ? st.on?.[1] ?? live.on[1] : live.on[1]}</b></div>
+      <div class="srow"><b>${final ? st.shots?.[0] ?? ls.shots[0] : ls.shots[0]}</b><span>Şut</span><b>${final ? st.shots?.[1] ?? ls.shots[1] : ls.shots[1]}</b></div>
+      <div class="srow"><b>${final ? st.on?.[0] ?? ls.on[0] : ls.on[0]}</b><span>İsabetli şut</span><b>${final ? st.on?.[1] ?? ls.on[1] : ls.on[1]}</b></div>
       ${final ? `<details class="lineups"><summary>Kadrolar</summary><div class="lcols"><div>${(st.lh || []).map((id) => `<div>${nm(id)}</div>`).join('')}<small>${esc(st.fh || '')}</small></div><div>${(st.la || []).map((id) => `<div>${nm(id)}</div>`).join('')}<small>${esc(st.fa || '')}</small></div></div></details>` : ''}`;
   }
   function flash(text, team) {
@@ -189,13 +221,20 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
 
   function step(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (playing) tm = Math.min(95, tm + dt * MIN_PER_SEC * speed);
+    if (live) tm = liveT();
+    else if (playing) tm = Math.min(95, tm + dt * MIN_PER_SEC * speed);
     if (flashT > 0) { flashT -= dt; if (flashT <= 0) document.getElementById('mFlash').classList.remove('show'); }
     while (shown < timeline.length && timeline[shown].t <= tm) emit(timeline[shown++]);
     document.getElementById('mMin').textContent = tm >= 94.9 ? 'MS' : tm >= 45 && tm < 46 ? 'İY' : `${Math.min(90, Math.floor(tm))}'${tm > 90 ? '+' : ''}`;
-    if (tm >= 95 && playing) { playing = false; finish(); }
+    if (tm >= 95 && (playing || live)) { playing = false; endLive(); finish(); }
     draw(dt);
     raf = requestAnimationFrame(step);
+  }
+  function endLive() {
+    if (!live) return;
+    live = false;
+    document.getElementById('mLive')?.remove();
+    document.querySelector('.mctrl')?.classList.remove('is-live');
   }
   function finish() {
     while (shown < timeline.length) emit(timeline[shown++]);
@@ -239,8 +278,9 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
         p.x = lerp(p.x, clamp(tx, 0.03, 0.97), sp); p.y = lerp(p.y, clamp(ty, 0.01, 0.99), sp);
         const r = Math.max(6, w * 0.022);
         ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), r, 0, Math.PI * 2);
-        ctx.fillStyle = i === 0 ? (s === 'h' ? '#ffd600' : '#00e5ff') : team?.color1 || '#c00';
-        ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = team?.color2 || '#fff'; ctx.stroke();
+        const k = s === 'h' ? KH : KA;
+        ctx.fillStyle = i === 0 ? (s === 'h' ? '#ffd600' : '#00e5ff') : k.fill;
+        ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = k.line === k.fill ? '#000' : k.line; ctx.stroke();
       });
     }
     // top + gölge
@@ -250,18 +290,25 @@ export async function openMatch(sb, fid, { teamById, onClose }) {
   }
 
   document.getElementById('mPlay').onclick = (e) => {
-    if (tm >= 95) { tm = 0; shown = 0; sh = sa = 0; live.shots = [0, 0]; live.on = [0, 0]; feed.innerHTML = ''; document.getElementById('sH').textContent = 0; document.getElementById('sA').textContent = 0; statsHtml(); playing = true; e.target.textContent = '⏸'; return; }
+    if (tm >= 95) { tm = 0; shown = 0; sh = sa = 0; ls.shots = [0, 0]; ls.on = [0, 0]; feed.innerHTML = ''; document.getElementById('sH').textContent = 0; document.getElementById('sA').textContent = 0; statsHtml(); playing = true; e.target.textContent = '⏸'; return; }
     playing = !playing; e.target.textContent = playing ? '⏸' : '▶';
   };
   document.querySelectorAll('#mSpeed button').forEach((b) => (b.onclick = () => { speed = Number(b.dataset.s); document.querySelectorAll('#mSpeed button').forEach((x) => x.classList.toggle('on', x === b)); }));
-  document.getElementById('mEnd').onclick = () => { tm = 95; playing = false; finish(); };
+  document.getElementById('mEnd').onclick = () => { endLive(); tm = 95; playing = false; finish(); };
   document.getElementById('mClose').onclick = close;
   statsHtml();
+  if (live) { // yayına ortadan katıldıysa önceki olayları sessizce işle
+    tm = liveT();
+    while (shown < timeline.length && timeline[shown].t <= tm) emit(timeline[shown++], true);
+  }
   raf = requestAnimationFrame(step);
+  void LIVE_RATE;
 
   function close() {
+    closed = true;
     cancelAnimationFrame(raf);
-    window.removeEventListener('resize', resize);
+    clearTimeout(waitTimer);
+    if (onResize) window.removeEventListener('resize', onResize);
     root.classList.remove('show'); root.innerHTML = '';
     onClose?.();
   }
