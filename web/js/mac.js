@@ -170,6 +170,7 @@ function simulateMatch(fx, events, R) {
   for (const e of shots) {
     e.t = Math.max(e.m - 0.4 + R() * 0.3, last + (lastGoal ? 2.9 : 2.0)); last = e.t; lastGoal = e.ev === 'goal';
     e.shooter = (e.s === 'h' ? 0 : 11) + (e.slot ?? (8 + Math.floor(R() * 3)));
+    const u = R(); e.style = u < 0.33 ? 'cross' : u < 0.5 ? 'long' : 'thru'; // kanattan orta / uzaktan şut / ara pas
   }
   const fouls = events.filter((e) => e.ev === 'yellow' || e.ev === 'red').sort((a, b) => a.m - b.m);
   for (const f of fouls) f.tf = f.m + 0.2;
@@ -272,7 +273,7 @@ function simulateMatch(fx, events, R) {
         }
       }
     }
-    if (ev && !ev.done && t >= ev.t && !dead && (holder === ev.shooter || t >= ev.t + 1.6)) {
+    if (ev && !ev.done && t >= ev.t && !dead && ((holder === ev.shooter && G(ev.s, ball.y) > PL - (ev.style === 'long' ? 31 : 25)) || (t >= ev.t + 1.6 && holder !== null && sideOf(holder) === ev.s && G(ev.s, P[holder].y) > PL * 0.62) || t >= ev.t + 4)) {
       // gecikme olduysa sonraki olayları kaydır (gol sonrası santraya yer kalsın)
       ev.t = t;
       let lt = t, lg = ev.ev === 'goal';
@@ -284,7 +285,8 @@ function simulateMatch(fx, events, R) {
       else if (ev.ev === 'save') { x1 = clamp(P[gk].x + (R() - 0.5) * 3, PW / 2 - 3.6, PW / 2 + 3.6); y1 = P[gk].y; } // kalecinin uzanabileceği yere
       else { x1 = PW / 2 + (R() < 0.5 ? -1 : 1) * (4.5 + R() * 5); y1 = gl + dirY(s) * 2.5; }
       const d = Math.hypot(x1 - ball.x, y1 - ball.y);
-      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * VIEW) + 0.02, R() < 0.4 ? 1.6 : 0.4);
+      const hv = ev.style === 'cross' ? 0.6 : 1;
+      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * hv * VIEW) + 0.02, ev.style === 'cross' ? 0.5 : R() < 0.4 ? 1.6 : 0.4);
       flight.ev = ev.ev; flight.side = s; flight.ref = ev;
       ev.done = true; ei++;
     }
@@ -319,7 +321,20 @@ function simulateMatch(fx, events, R) {
         if (dist(P[tk], ball) < 1.6) { holder = tk; nextAct = t + 0.15; } else { loose = { to: tk, vx: 0, vy: 0, t0: t }; holder = null; }
       } else if (attack && s === nev.s) {
         const shooter = nev.shooter;
-        if (t >= nev.t - 0.4 && holder !== shooter && t >= nextAct) pass(holder, shooter, null, true);
+        if (nev.style === 'cross' && nev.winger === undefined) { // ortayı açacak kanat oyuncusu
+          let bw = -1, bx = -1;
+          for (let k = 2; k < 11; k++) { const j = J(s, k); if (j === shooter || roles[s][k].r < 0.45) continue; const dx = Math.abs(P[j].x - PW / 2); if (dx > bx) { bx = dx; bw = j; } }
+          nev.winger = bw; nev.wx = bw >= 0 && P[bw].x < PW / 2 ? 4 : PW - 4;
+        }
+        const wg = nev.style === 'cross' ? nev.winger : -1;
+        if (wg >= 0 && holder === wg && t >= nev.t - 0.35 && t >= nextAct) { // orta: havadan şutçunun koşu yoluna
+          const sp = shotSpot(nev), d = Math.hypot(sp.x - ball.x, sp.y - ball.y);
+          startFlight(shooter, sp.x, sp.y, 'pass', s, d / (PASS_V * 0.85 * VIEW) + 0.05, 3.5 + R() * 1.5);
+        } else if (wg >= 0 && holder !== wg && holder !== shooter && t < nev.t - 0.45 && t >= nextAct) {
+          const d = dist(P[wg], ball); // kanada aç
+          startFlight(wg, nev.wx, Yg(s, Math.min(PL - 14, G(s, P[wg].y) + 6)), 'pass', s, d / (PASS_V * VIEW) + 0.04, d > 25 ? 3 : 0.3);
+        } else if (wg >= 0 && holder === wg) { /* kanat oyuncusu çizgiye iner */ }
+        else if (t >= nev.t - 0.4 && holder !== shooter && t >= nextAct) pass(holder, shooter, null, nev.style !== 'long');
         else if (t >= nextAct && holder !== shooter) {
           // ileri pas: rakip kaleye en yakın oyunculardan biri
           let best = -1, bp = -1;
@@ -377,13 +392,16 @@ function simulateMatch(fx, events, R) {
         if (flight && flight.kind === 'shot' && flight.to === j) { tx = flight.x1; ty = flight.y1; vmax = RUN; }
       }
       if (!dead) {
-        if (j === holder) { // top sürme: hücum yönüne ağır ağır
+        if (j === holder && attack && nev.style === 'cross' && j === nev.winger) { // çizgiye doğru sürer
+          tx = nev.wx; ty = Yg(s, PL - 12); vmax = JOG;
+        } else if (j === holder) { // top sürme: hücum yönüne ağır ağır
           tx = p.x + (PW / 2 - p.x) * 0.05; ty = Yg(s, Math.min(G(s, p.y) + 3, Math.max(G(s, p.y), PL - 20))); vmax = JOG * 0.8;
           if (G(s, p.y) > PL - 22) tx = p.x + (p.x < PW / 2 ? 4 : -4); // ceza sahası önünde yana sürer
           if (attack && s === nev.s && k > 0) { const sp = shotSpot(nev); tx = sp.x; ty = Yg(s, Math.min(G(s, sp.y), blk[s].off + 3)); vmax = JOG; }
         } else if (flight && flight.kind === 'pass' && flight.to === j) { tx = flight.x1; ty = flight.y1; vmax = RUN; }
         else if (loose && loose.to === j) { tx = ball.x; ty = ball.y; vmax = RUN; }
         else if (j === presser) { const d = dist(p, ball); if (d > 2) { tx = ball.x; ty = ball.y; vmax = RUN * 0.85; } }
+        else if (attack && nev.style === 'cross' && j === nev.winger) { tx = nev.wx; ty = Yg(s, Math.min(PL - 14, blk[s].off - 1)); vmax = RUN * 0.8; }
         else if (attack && j === nev.shooter) {
           const sp = shotSpot(nev); tx = sp.x;
           ty = Yg(s, Math.min(G(s, sp.y), blk[s].off - 0.8)); vmax = RUN * 0.8; // pas çıkana kadar çizgide
@@ -426,7 +444,10 @@ function simulateMatch(fx, events, R) {
     frames[o + 44] = ball.x / PW; frames[o + 45] = ball.y / PL; frames[o + 46] = ball.z; frames[o + 47] = holder === null ? -1 : holder;
   }
   function shotSpot(e) {
-    if (!e.spot) e.spot = { x: PW / 2 + (R() - 0.5) * 22, y: goalLine(e.s) * PL - dirY(e.s) * (11 + R() * 8) };
+    if (!e.spot) {
+      const [wx, d0, dd] = e.style === 'cross' ? [10, 6, 5] : e.style === 'long' ? [26, 21, 7] : [22, 11, 8];
+      e.spot = { x: PW / 2 + (R() - 0.5) * wx, y: goalLine(e.s) * PL - dirY(e.s) * (d0 + R() * dd) };
+    }
     return e.spot;
   }
   return { frames, N, evs: shots, T_END, fouls };
