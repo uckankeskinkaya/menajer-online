@@ -108,7 +108,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     await new Promise((r) => (waitTimer = setTimeout(r, k && k - Date.now() > 60000 ? 30000 : 4000)));
     if (closed) return;
   }
-  const ids = [...(fx.stats?.lh || []), ...(fx.stats?.la || []), ...(fx.events || []).flatMap((e) => [e.p, e.a])].filter(Boolean);
+  const ids = [...(fx.stats?.lh || []), ...(fx.stats?.la || []), ...Object.keys(fx.stats?.rt || {}).map(Number), ...(fx.events || []).flatMap((e) => [e.p, e.a])].filter(Boolean);
   const names = new Map();
   if (ids.length) {
     const { data } = await sb.from('real_players').select('id,name').in('id', [...new Set(ids)]);
@@ -136,9 +136,10 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   const startedAgo = fx.kickoff_at ? Date.now() - new Date(fx.kickoff_at) : Infinity;
   let live = startedAgo >= 0 && startedAgo < liveMs;
   const R = rng(fid * 2654435761);
-  const shotEvents = events.filter((e) => e.ev !== 'yellow');
+  const SHOTS = ['goal', 'save', 'miss'];
+  const shotEvents = events.filter((e) => SHOTS.includes(e.ev));
   const { segs, base, evs } = buildScript({ ...fx, events: shotEvents }, R);
-  const cards = events.filter((e) => e.ev === 'yellow').map((e) => ({ ...e, t: e.m }));
+  const cards = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.m + 0.2 }));
   const timeline = [...evs, ...cards].sort((a, b) => a.t - b.t);
 
   root.innerHTML = `
@@ -201,6 +202,9 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     } else if (e.ev === 'save') { ls.shots[e.s === 'h' ? 0 : 1]++; ls.on[e.s === 'h' ? 0 : 1]++; txt = `🧤 Kurtarış! ${nm(e.p)} şutu`; }
     else if (e.ev === 'miss') { ls.shots[e.s === 'h' ? 0 : 1]++; txt = `💨 ${nm(e.p)} auta attı`; }
     else if (e.ev === 'yellow') { txt = `🟨 ${nm(e.p)}`; cls = 'card'; }
+    else if (e.ev === 'red') { txt = `🟥 <b>Kırmızı kart!</b> ${nm(e.p)}`; cls = 'card red'; if (!silent) flash(`🟥 ${names.get(e.p) || ''}`, { color1: '#c62828', color2: '#fff' }); }
+    else if (e.ev === 'injury') { txt = `🚑 ${nm(e.p)} sakatlandı`; cls = 'card'; }
+    else if (e.ev === 'sub') { txt = `🔁 ${nm(e.a)} girdi, ${nm(e.p)} çıktı`; }
     feed.insertAdjacentHTML('afterbegin', `<div class="fe ${cls} ${e.s}"><span class="fm">${Math.min(90, Math.round(e.m))}'</span>${teamDot(team)} ${txt}</div>`);
     statsHtml();
   }
@@ -211,7 +215,14 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       ${p ? `<div class="srow"><b>${p[0]}%</b><span>Topa sahip olma</span><b>${p[1]}%</b></div>` : ''}
       <div class="srow"><b>${final ? st.shots?.[0] ?? ls.shots[0] : ls.shots[0]}</b><span>Şut</span><b>${final ? st.shots?.[1] ?? ls.shots[1] : ls.shots[1]}</b></div>
       <div class="srow"><b>${final ? st.on?.[0] ?? ls.on[0] : ls.on[0]}</b><span>İsabetli şut</span><b>${final ? st.on?.[1] ?? ls.on[1] : ls.on[1]}</b></div>
-      ${final ? `<details class="lineups"><summary>Kadrolar</summary><div class="lcols"><div>${(st.lh || []).map((id) => `<div>${nm(id)}</div>`).join('')}<small>${esc(st.fh || '')}</small></div><div>${(st.la || []).map((id) => `<div>${nm(id)}</div>`).join('')}<small>${esc(st.fa || '')}</small></div></div></details>` : ''}`;
+      ${final && st.motm ? `<div class="motm">⭐ Maçın adamı: <b>${nm(st.motm)}</b> ${st.rt?.[st.motm] ?? ''}</div>` : ''}
+      ${final ? `<details class="lineups" ${st.rt ? 'open' : ''}><summary>Kadrolar ve puanlar</summary><div class="lcols">${['h', 'a'].map((sd) => {
+        const start = (sd === 'h' ? st.lh : st.la) || [];
+        const subsIn = (fx.events || []).filter((e) => e.t === 'sub' && e.s === sd).map((e) => e.a);
+        const out = new Set((fx.events || []).filter((e) => e.t === 'sub' && e.s === sd).map((e) => e.p));
+        const line = (id, sub) => `<div class="${id === st.motm ? 'star' : ''}">${sub ? '↳ ' : ''}${nm(id)}${out.has(id) ? ' ↓' : ''} ${st.rt?.[id] != null ? `<b class="rt ${st.rt[id] >= 7.5 ? 'hi' : st.rt[id] < 6 ? 'lo' : ''}">${Number(st.rt[id]).toFixed(1)}</b>` : ''}</div>`;
+        return `<div>${start.map((id) => line(id)).join('')}${subsIn.map((id) => line(id, true)).join('')}<small>${esc((sd === 'h' ? st.fh : st.fa) || '')}</small></div>`;
+      }).join('')}</div></details>` : ''}`;
   }
   function flash(text, team) {
     const el = document.getElementById('mFlash');
