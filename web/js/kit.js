@@ -26,10 +26,18 @@ export const numColor = (k) => (colorDist(k.c1, k.c2) > 120 ? k.c2 : lum(k.c1) >
 const GRASS = '#2e7d32';
 export function matchKits(home, away) {
   const h = kitOf(home), a = kitOf(away);
+  // algıya yakın renk farkı (redmean): mor-eflatun gibi yakın tonları da yakalar
+  const pd = (a, b) => { const x = rgb(a), y = rgb(b), rm = (x[0] + y[0]) / 2; const dr = x[0] - y[0], dg = x[1] - y[1], db = x[2] - y[2];
+    return Math.sqrt((2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db); };
+  const bad = (c, other) => pd(c, GRASS) < 160 || (other && pd(c, other.c1) < 200);
   const fix = (k, other) => {
     let r = { ...k };
-    if (colorDist(r.c1, GRASS) < 80 || (other && colorDist(r.c1, other.c1) < 100)) r = { ...r, c1: k.c2, c2: k.c1 };
-    if (colorDist(r.c1, GRASS) < 80 || (other && colorDist(r.c1, other.c1) < 100)) r = { ...r, c1: lum(other?.c1 || '#000') > 0.5 ? '#111111' : '#f5f5f5', c2: r.c1, pattern: 'plain' };
+    if (bad(r.c1, other) && !bad(k.c2, other)) r = { ...r, c1: k.c2, c2: k.c1 };
+    if (bad(r.c1, other)) { // deplasman forması: rakipten ve çimden en uzak renk
+      const opts = ['#f5f5f5', '#111111', '#facc15', '#e53935', '#1e88e5', '#f97316'];
+      const best = opts.reduce((m, c) => (Math.min(pd(c, GRASS), other ? pd(c, other.c1) : 999) > Math.min(pd(m, GRASS), other ? pd(m, other.c1) : 999) ? c : m), opts[0]);
+      r = { ...r, c1: best, c2: pd(k.c1, best) > 150 ? k.c1 : (lum(best) > 0.5 ? '#111111' : '#ffffff'), pattern: 'plain' };
+    }
     return r;
   };
   const H = fix(h);

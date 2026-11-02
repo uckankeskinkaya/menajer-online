@@ -107,6 +107,16 @@ class Pitch2D {
       const isC = st.carrier && st.carrier.s === it.s && st.carrier.i === it.i;
       drawDot(ctx, X(it.p.x), Y(it.p.y), size / 2, kit, st.num(st.ids[it.s][it.i]), { highlight: isC });
       if (isC) carrier = it;
+      else if (st.showNames) { // soyadı, dairenin altında
+        const nm = (st.name(st.ids[it.s][it.i]) || '').split(' ').pop();
+        if (nm) {
+          ctx.font = `600 ${Math.max(7, size * 0.36)}px Inter, system-ui, sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(8,14,26,.75)'; ctx.lineJoin = 'round';
+          ctx.strokeText(nm, X(it.p.x), Y(it.p.y) + size * 0.55);
+          ctx.fillStyle = '#fff'; ctx.fillText(nm, X(it.p.x), Y(it.p.y) + size * 0.55);
+        }
+      }
     }
     if (carrier) {
       const name = st.name(st.ids[carrier.s][carrier.i]);
@@ -719,6 +729,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       <button class="btn sm icon" id="mPlay" title="Oynat/durdur">❚❚</button>
       <div class="seg sm" id="mSpeed">${[1, 2, 4].map((s) => `<button data-s="${s}" class="${s === 1 ? 'on' : ''}">${s}x</button>`).join('')}</div>
       <div class="seg sm" id="mMode"><button data-m="2d" class="on">2D</button><button data-m="3d">3D</button></div>
+      <button class="btn sm" id="mNames" title="Oyuncu isimleri">Aa</button>
       <button class="btn sm" id="mNext" title="Sonraki an">⏩</button>
       <button class="btn sm" id="mEnd" title="Sona atla">⏭</button>
     </div>
@@ -866,7 +877,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   function render(dt) {
     frameAt(sim, tm, frame);
     const lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock));
-    const st = { ply: frame.ply, ids: lu.ids, gone: lu.gone, kits, ball: frame.ball, carrier: frame.carrier, num, name: (id) => names.get(id) || '' };
+    const st = { ply: frame.ply, ids: lu.ids, gone: lu.gone, kits, ball: frame.ball, carrier: frame.carrier, num, name: (id) => names.get(id) || '', showNames };
     if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
   }
   function endLive() {
@@ -925,6 +936,14 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     } else if (m === '3d') r3d.resize();
     else r2d.resize();
   }));
+  let showNames = false;
+  try { showNames = localStorage.getItem('mac-isim') === '1'; } catch { /* yok */ }
+  const namesBtn = document.getElementById('mNames');
+  namesBtn.classList.toggle('on', showNames);
+  namesBtn.onclick = () => {
+    showNames = !showNames; namesBtn.classList.toggle('on', showNames);
+    try { localStorage.setItem('mac-isim', showNames ? '1' : '0'); } catch { /* yok */ }
+  };
   document.getElementById('mEnd').onclick = () => { pauseT = 0; finish(); };
   document.getElementById('mClose').onclick = close;
   statsHtml();
