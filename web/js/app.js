@@ -6,7 +6,7 @@ import {
   timeLeft, ago, slots, slotPositions,
 } from './ui.js';
 import { openMatch } from './mac.js';
-import { crestSVG, shirtSVG, kitOf, PATTERNS, CRESTS, SYMBOLS } from './kit.js';
+import { crestSVG, shirtSVG, dotHTML, kitOf, PATTERNS, CRESTS, SYMBOLS } from './kit.js';
 
 // çizim simgeleri (emoji yerine)
 const ICON = {
@@ -753,7 +753,7 @@ function renderTaktik() {
         const off = p && p.grp !== g;
         const un = p && unavailable(p.sq);
         return `<button class="slot ${off ? 'off' : ''} ${p ? '' : 'empty'} ${un ? 'unav' : ''}" data-i="${i}" style="left:${pos[i].x * 100}%;top:${pos[i].y * 100}%">
-          ${p ? `${shirtSVG(t, { num: p.sq?.shirt ?? '', size: 40, kit: i === 0 ? { c1: '#facc15', c2: '#1f2937', pattern: 'plain' } : undefined })}<span class="nm">${esc(p.name)}</span><span class="ochip ${off || un ? 'warn' : ''}">${un ? (p.sq.injury > 0 ? '🚑' : '🟥') : p.ovr}</span>${fitBar(p.sq?.fitness ?? 100)}` : `<span class="nm">${g}</span>`}</button>`;
+          ${p ? `${dotHTML(i === 0 ? { c1: '#facc15', c2: '#1f2937', pattern: 'plain' } : kitOf(t), p.sq?.shirt ?? i + 1, 36)}<span class="nm">${esc(p.name)}</span><span class="ochip ${off || un ? 'warn' : ''}">${un ? (p.sq.injury > 0 ? '🚑' : '🟥') : p.ovr}</span>${fitBar(p.sq?.fitness ?? 100)}` : `<span class="nm">${g}</span>`}</button>`;
       }).join('')}
     </div>
     ${bad.length ? `<p class="warn small">⚠️ İlk 11'de oynayamayacak oyuncu var (${bad.map((id) => esc(pv(id).name)).join(', ')}). Değiştirmezsen maçta yerine kenardan en iyisi oynar.</p>` : ''}

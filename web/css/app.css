@@ -261,8 +261,6 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .mscore .livebadge { color: #f87171 !important; animation: blink 1.4s infinite; margin-top: 0; }
 .mstage { position: relative; width: 100%; aspect-ratio: 0.64; max-height: 64vh; margin: 0 auto; border-radius: 14px; overflow: hidden; background: #1f5e25; box-shadow: var(--shadow); }
 .mstage canvas { display: block; }
-.mstage .m3d { position: absolute; inset: 0; display: none; }
-.mstage.is3d { aspect-ratio: 0.8; } .mstage.is3d .m3d { display: block; } .mstage.is3d #pitchCv { visibility: hidden; }
 .mflash { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.6); opacity: 0; font: 800 30px/1 var(--disp); letter-spacing: .04em; padding: 12px 22px; border-radius: 14px; transition: .2s; pointer-events: none; white-space: nowrap; box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 2; }
 .mflash.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .mover { position: absolute; left: 0; right: 0; top: 10px; display: none; justify-content: center; pointer-events: none; z-index: 2; }
@@ -300,3 +298,4 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .fe.injury .fi { background: #fb7185; } .fe.sub .fi { background: var(--violet); }
 .fe .in { color: #86efac; } .fe .out { color: #fca5a5; }
 @keyframes blink { 50% { opacity: .45; } }
+.pdot { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 3px solid; font-family: var(--disp); font-weight: 800; line-height: 1; box-shadow: 0 3px 6px rgba(0,0,0,.45); }

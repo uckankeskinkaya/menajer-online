@@ -29,8 +29,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
   - Menajerden menajere: değerin altına teklif yapılamaz; karar satıcıda (kabul/ret). Teklif `offer_hours` (24 saat) geçerli.
   - Yapay zekaya satış: değerin %75'i, anında. Kadro sınırı 16-30.
 - **Maçlar sunucuda simüle edilir.** Varsayılan `schedule: auto`: her gün bir hafta, her maçın kendi saati (`fixtures.kickoff_at`, ilk maç `kickoff` 11:00, `gap_min` 10 dk, `tz` Europe/Istanbul); pg_cron her dakika `_auto_tick()` ile saati gelen maçı oynatır. İstemci maçı kickoff'tan itibaren 9 dakika "canlı" oynatır (skor bu sürede gizli). `manual` modda oda sahibi `play_next_round` der ya da herkes `set_ready` olunca oynar. Hazırlık maçı: `comp = 'friendly'`, puan/prim yok. Sonuç `fixtures.events` olay listesi
-  (`{m, t: goal|save|miss|yellow|red|injury|sub, s: h|a, p, a}`; sub'da p çıkan a giren) ve `fixtures.stats` (`rt` oyuncu puanları, `motm`) olarak kaydedilir. Maç motoru sabitleri: şut 0.22, gol 0.29 (bkz. `mac-motoru` skill'i; skill'deki eski sabitler 004 dönemine ait). İstemci bunu 2D Canvas'ta kuşbakışı oynatır
-  (sonra Three.js ile 3D). Hedef: maç başına ~2.5 gol.
+  (`{m, t: goal|save|miss|yellow|red|injury|sub, s: h|a, p, a}`; sub'da p çıkan a giren) ve `fixtures.stats` (`rt` oyuncu puanları, `motm`) olarak kaydedilir. Maç motoru sabitleri: şut 0.22, gol 0.29 (bkz. `mac-motoru` skill'i; skill'deki eski sabitler 004 dönemine ait). İstemci bunu 2D Canvas'ta kuşbakışı oynatır: oyuncular takım renginde, içinde forma numarası (`squads.shirt`) olan dairelerdir. 3D yapılmayacak (kullanıcı kararı). Hedef: maç başına ~2.5 gol.
 - **Auth:** e-posta + şifre, kullanıcı adı `raw_user_meta_data.username` → `profiles` (trigger `handle_new_user`).
   Dashboard'da "Confirm email" kapalı, e-posta sağlayıcısı açık.
 - **Realtime:** publishable key ile kanal anon katılır; kanal açmadan önce `sb.realtime.setAuth(access_token)` şart, yoksa RLS hiçbir olayı geçirmez.
@@ -46,6 +45,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 006_canli_maclar | ✅ kullanıcı SQL Editor'den uyguladı: YZ takımları, saatli otomatik maçlar (`_auto_tick`, pg_cron `auto-matches` her dakika), hazırlık maçı, hazırım, YZ teklifleri, transfer dönemi, oda yönetimi |
 | 007_yz_renkleri | ✅ `execute_sql` ile |
 | 008_faz2 | ✅ kullanıcı SQL Editor'den: maç puanları (`stats.rt`, `motm`), kondisyon/form/gelişim (`squads.fitness/form/ovr_delta`), kart cezası/sakatlık (`ban`/`injury`/`yellows`), maç içi değişiklik, maaş/bilet/ödül, `new_season`, `player_stats`, `games.season/history` |
+| 010_forma | ⏳ kullanıcı SQL Editor'den uygulayacak: `squads.shirt` (trigger ile otomatik), `teams.kit` (desen/arma/sembol), `set_kit` |
 | 009_dinlenme | ✅ `execute_sql`: günlük dinlenme +20, gol sabiti 0.29 → 540 maçta 2.55 gol/maç |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |

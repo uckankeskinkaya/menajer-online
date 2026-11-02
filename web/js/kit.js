@@ -1,4 +1,4 @@
-// Forma, arma ve numara çizimleri (SVG: arayüz, Canvas: 2D/3D maç)
+// Forma, arma ve numara çizimleri (SVG: arayüz, Canvas: 2D maç)
 export const PATTERNS = { plain: 'Düz', stripes: 'Dikey çizgili', hoops: 'Yatay çizgili', halves: 'Yarım', sash: 'Kuşak' };
 export const CRESTS = { shield: 'Kalkan', classic: 'Klasik', circle: 'Yuvarlak', diamond: 'Elmas' };
 export const SYMBOLS = ['', '★', '⚡', '🦅', '🦁', '🐺', '🔥', '⚓', '👑', '⚔️', '🌙', '☀️', '🐂', '🐉', '🌊', '⛰️', '🍀'];
@@ -85,35 +85,27 @@ export function crestSVG(team, size = 28) {
 }
 
 // ---------- Canvas ----------
-const SHIRT_PATH = typeof Path2D !== 'undefined' ? new Path2D(SHIRT) : null;
-export function drawShirt(ctx, x, y, size, k, num, { alpha = 1, highlight = false } = {}) {
-  const s = size / 100;
+// maçtaki oyuncu: takım renginde daire, ortasında forma numarası
+export function drawDot(ctx, x, y, r, k, num, { highlight = false } = {}) {
   ctx.save();
-  ctx.globalAlpha = alpha;
-  // gölge
-  ctx.fillStyle = 'rgba(0,0,0,.28)';
-  ctx.beginPath(); ctx.ellipse(x + size * 0.06, y + size * 0.46, size * 0.36, size * 0.12, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.translate(x - size / 2, y - size / 2);
-  ctx.scale(s, s);
-  ctx.save();
-  ctx.clip(SHIRT_PATH);
-  ctx.fillStyle = k.c1; ctx.fillRect(0, 0, 100, 100);
-  ctx.fillStyle = k.c2;
-  if (k.pattern === 'stripes') [18, 34, 50, 66, 82].forEach((sx) => ctx.fillRect(sx - 4, 0, 8, 100));
-  else if (k.pattern === 'hoops') [30, 50, 70, 90].forEach((sy) => ctx.fillRect(0, sy - 5, 100, 10));
-  else if (k.pattern === 'halves') ctx.fillRect(50, 0, 50, 100);
-  else if (k.pattern === 'sash') { ctx.beginPath(); ctx.moveTo(20, 10); ctx.lineTo(36, 10); ctx.lineTo(84, 95); ctx.lineTo(68, 95); ctx.fill(); }
-  ctx.restore();
-  ctx.lineWidth = highlight ? 7 : 4;
-  ctx.strokeStyle = highlight ? '#fff' : 'rgba(0,0,0,.55)';
-  ctx.stroke(SHIRT_PATH);
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath(); ctx.ellipse(x + r * 0.15, y + r * 0.85, r * 0.9, r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = k.c1; ctx.fill();
+  ctx.lineWidth = Math.max(2, r * 0.2);
+  ctx.strokeStyle = highlight ? '#ffffff' : colorDist(k.c1, k.c2) > 60 ? k.c2 : (lum(k.c1) > 0.5 ? '#111111' : '#ffffff');
+  ctx.stroke();
+  if (highlight) { ctx.beginPath(); ctx.arc(x, y, r + 3, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; ctx.stroke(); }
   if (num !== undefined && num !== null && num !== '') {
     const nc = numColor(k);
-    ctx.font = `800 44px 'Barlow Condensed', 'Arial Narrow', sans-serif`;
+    ctx.font = `800 ${Math.round(r * 1.25)}px 'Barlow Condensed', 'Arial Narrow', sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineWidth = 6; ctx.strokeStyle = nc === '#111111' ? 'rgba(255,255,255,.8)' : 'rgba(0,0,0,.6)';
-    ctx.strokeText(String(num), 50, 58);
-    ctx.fillStyle = nc; ctx.fillText(String(num), 50, 58);
+    ctx.fillStyle = nc; ctx.fillText(String(num), x, y + r * 0.08);
   }
   ctx.restore();
+}
+// arayüzde (taktik sahası) aynı daire
+export function dotHTML(k, num, size = 34) {
+  const line = colorDist(k.c1, k.c2) > 60 ? k.c2 : (lum(k.c1) > 0.5 ? '#111111' : '#ffffff');
+  return `<span class="pdot" style="width:${size}px;height:${size}px;background:${k.c1};border-color:${line};color:${numColor(k)};font-size:${Math.round(size * 0.55)}px">${esc(num)}</span>`;
 }

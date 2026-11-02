@@ -1,10 +1,9 @@
 // Maç izleyici: sunucudaki olay listesinden (fixtures.events) animasyon üretir.
-// 2D kuşbakışı (Canvas) ve 3D yayın kamerası (Three.js, istenince yüklenir).
+// 2D kuşbakışı (Canvas): oyuncular içinde forma numarası olan dairelerdir.
 // Saha koordinatları 0-1: x en, y boy; ev sahibi y=0 kalesine hücum eder.
 import { esc, slotPositions } from './ui.js';
-import { matchKits, drawShirt, crestSVG, numColor, lum } from './kit.js';
+import { matchKits, drawDot, crestSVG, numColor } from './kit.js';
 
-const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 const GOAL_W = 7.32 / 68;      // kale ağzı (saha enine oranla)
 const PL = 105, PW = 68;       // metre
 
@@ -160,7 +159,7 @@ class Pitch2D {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.bg, 0, 0);
     const dpr = this.cv.width / this.W; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const size = Math.max(22, w * 0.075);
+    const size = Math.max(20, w * 0.066);
     const items = [];
     for (const s of ['h', 'a']) st.ply[s].forEach((p, i) => { if (!st.gone.has(st.ids[s][i])) items.push({ s, i, p }); });
     items.sort((a, b) => a.p.y - b.p.y);
@@ -168,13 +167,13 @@ class Pitch2D {
     for (const it of items) {
       const kit = it.i === 0 ? st.kits[it.s === 'h' ? 'gkH' : 'gkA'] : st.kits[it.s];
       const isC = st.carrier && st.carrier.s === it.s && st.carrier.i === it.i;
-      drawShirt(ctx, X(it.p.x), Y(it.p.y), size, kit, st.num(st.ids[it.s][it.i]), { highlight: isC });
+      drawDot(ctx, X(it.p.x), Y(it.p.y), size / 2, kit, st.num(st.ids[it.s][it.i]), { highlight: isC });
       if (isC) carrier = it;
     }
     if (carrier) {
       const name = st.name(st.ids[carrier.s][carrier.i]);
       ctx.font = `600 ${Math.max(10, size * 0.42)}px Inter, system-ui, sans-serif`;
-      const tw = ctx.measureText(name).width + 10, x = X(carrier.p.x), y = Y(carrier.p.y) + size * 0.62;
+      const tw = ctx.measureText(name).width + 10, x = X(carrier.p.x), y = Y(carrier.p.y) + size * 0.68;
       ctx.fillStyle = 'rgba(8,14,26,.82)';
       ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - tw / 2, y, tw, size * 0.62, 6) : ctx.rect(x - tw / 2, y, tw, size * 0.62); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -193,136 +192,12 @@ class Pitch2D {
   dispose() {}
 }
 
-// ---------------- 3D ----------------
-class Pitch3D {
-  async init(host, st) {
-    const THREE = (this.THREE = await import(THREE_URL));
-    this.host = host;
-    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true }));
-    r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    host.appendChild(r.domElement);
-    const scene = (this.scene = new THREE.Scene());
-    scene.background = new THREE.Color('#0b1220');
-    scene.fog = new THREE.Fog('#0b1220', 90, 190);
-    this.camera = new THREE.PerspectiveCamera(36, 1, 0.5, 400);
-    scene.add(new THREE.HemisphereLight('#dfefff', '#1d3b22', 1.1));
-    const sun = new THREE.DirectionalLight('#ffffff', 1.2); sun.position.set(-30, 60, 20); scene.add(sun);
-    // zemin + saha dokusu
-    const surround = new THREE.Mesh(new THREE.PlaneGeometry(PW + 40, PL + 40), new THREE.MeshLambertMaterial({ color: '#235f29' }));
-    surround.rotation.x = -Math.PI / 2; surround.position.y = -0.02; scene.add(surround);
-    const tc = document.createElement('canvas'); tc.width = 680; tc.height = 1050;
-    drawPitch(tc.getContext('2d'), 0, 0, 680, 1050);
-    const tex = new THREE.CanvasTexture(tc); tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
-    const pitch = new THREE.Mesh(new THREE.PlaneGeometry(PW, PL), new THREE.MeshLambertMaterial({ map: tex }));
-    pitch.rotation.x = -Math.PI / 2; scene.add(pitch);
-    // tribün hissi: kenarlarda koyu bloklar
-    const standMat = new THREE.MeshLambertMaterial({ color: '#1a2438' });
-    for (const [x, z, sx, sz] of [[-PW / 2 - 14, 0, 6, PL + 20], [PW / 2 + 14, 0, 6, PL + 20], [0, -PL / 2 - 14, PW + 34, 6], [0, PL / 2 + 14, PW + 34, 6]]) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, 7, sz), standMat); m.position.set(x, 3.5, z); scene.add(m);
-    }
-    // kaleler
-    const postMat = new THREE.MeshLambertMaterial({ color: '#ffffff' });
-    const netMat = new THREE.MeshBasicMaterial({ color: '#ffffff', wireframe: true, transparent: true, opacity: 0.35 });
-    for (const zs of [-1, 1]) {
-      const z = (zs * PL) / 2, g = new THREE.Group();
-      for (const xs of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.44, 10), postMat); p.position.set((xs * 7.32) / 2, 1.22, z); g.add(p); }
-      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 7.32, 10), postMat); bar.rotation.z = Math.PI / 2; bar.position.set(0, 2.44, z); g.add(bar);
-      const net = new THREE.Mesh(new THREE.BoxGeometry(7.32, 2.44, 2, 10, 4, 3), netMat); net.position.set(0, 1.22, z + zs * 1); g.add(net);
-      scene.add(g);
-    }
-    // oyuncular
-    const blob = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
-      const g = x.createRadialGradient(32, 32, 4, 32, 32, 30); g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
-      return new THREE.CanvasTexture(c); })();
-    this.shadowMat = new THREE.MeshBasicMaterial({ map: blob, transparent: true, depthWrite: false });
-    this.players = { h: [], a: [] };
-    this.texCache = new Map();
-    for (const s of ['h', 'a']) for (let i = 0; i < 11; i++) this.players[s].push(this.makePlayer(st, s, i));
-    // top
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.45, 18, 14), new THREE.MeshLambertMaterial({ color: '#ffffff' }));
-    scene.add(this.ball);
-    this.ballShadow = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), this.shadowMat); this.ballShadow.rotation.x = -Math.PI / 2; scene.add(this.ballShadow);
-    this.camT = new THREE.Vector3(0, 0, 0);
-    this.resize();
-  }
-  shirtTex(kit, num) {
-    const key = `${kit.c1}${kit.c2}${kit.pattern}${num}`;
-    if (this.texCache.has(key)) return this.texCache.get(key);
-    const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
-    x.fillStyle = kit.c1; x.fillRect(0, 0, 256, 128); x.fillStyle = kit.c2;
-    if (kit.pattern === 'stripes') for (let i = 0; i < 256; i += 32) x.fillRect(i + 10, 0, 12, 128);
-    else if (kit.pattern === 'hoops') for (let i = 12; i < 128; i += 30) x.fillRect(0, i, 256, 12);
-    else if (kit.pattern === 'halves') x.fillRect(128, 0, 128, 128);
-    else if (kit.pattern === 'sash') { x.beginPath(); x.moveTo(40, 0); x.lineTo(80, 0); x.lineTo(150, 128); x.lineTo(110, 128); x.fill(); }
-    const nc = numColor(kit);
-    x.font = "800 70px 'Barlow Condensed', 'Arial Narrow', sans-serif"; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.lineWidth = 8; x.strokeStyle = nc === '#111111' ? 'rgba(255,255,255,.8)' : 'rgba(0,0,0,.6)';
-    for (const cx of [64, 192]) { x.strokeText(String(num ?? ''), cx, 68); x.fillStyle = nc; x.fillText(String(num ?? ''), cx, 68); }
-    const t = new this.THREE.CanvasTexture(c); t.colorSpace = this.THREE.SRGBColorSpace;
-    this.texCache.set(key, t);
-    return t;
-  }
-  makePlayer(st, s, i) {
-    const THREE = this.THREE;
-    const g = new THREE.Group();
-    const kit = i === 0 ? st.kits[s === 'h' ? 'gkH' : 'gkA'] : st.kits[s];
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.45, 1.5, 16), new THREE.MeshLambertMaterial({ map: this.shirtTex(kit, st.num(st.ids[s][i])) }));
-    body.position.y = 1.75; g.add(body);
-    const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.42, 0.5, 12), new THREE.MeshLambertMaterial({ color: lum(kit.c1) > 0.6 ? '#1f2937' : kit.c2 }));
-    shorts.position.y = 0.85; g.add(shorts);
-    for (const xs of [-0.2, 0.2]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.65, 8), new THREE.MeshLambertMaterial({ color: '#e5c7a6' })); leg.position.set(xs, 0.33, 0); g.add(leg); }
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.33, 14, 12), new THREE.MeshLambertMaterial({ color: '#d8b48f' }));
-    head.position.y = 2.82; g.add(head);
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), this.shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; g.add(sh);
-    g.scale.setScalar(1.25);
-    g.userData = { body, id: st.ids[s][i] };
-    this.scene.add(g);
-    return g;
-  }
-  resize() {
-    const b = this.host.getBoundingClientRect();
-    this.renderer.setSize(b.width, b.height);
-    this.camera.aspect = b.width / Math.max(1, b.height); this.camera.updateProjectionMatrix();
-  }
-  draw(st, dt) {
-    const W = (x) => (x - 0.5) * PW, Z = (y) => (y - 0.5) * PL;
-    for (const s of ['h', 'a']) st.ply[s].forEach((p, i) => {
-      const g = this.players[s][i];
-      const id = st.ids[s][i];
-      g.visible = !st.gone.has(id);
-      if (g.userData.id !== id) { // oyuncu değişikliği: yeni numara
-        const kit = i === 0 ? st.kits[s === 'h' ? 'gkH' : 'gkA'] : st.kits[s];
-        g.userData.body.material.map = this.shirtTex(kit, st.num(id)); g.userData.body.material.needsUpdate = true; g.userData.id = id;
-      }
-      const nx = W(p.x), nz = Z(p.y);
-      const dx = nx - g.position.x, dz = nz - g.position.z;
-      if (Math.abs(dx) + Math.abs(dz) > 0.01) g.rotation.y = Math.atan2(dx, dz);
-      g.position.set(nx, 0, nz);
-    });
-    const b = st.ball;
-    this.ball.position.set(W(b.x), 0.45 + b.z * 0.35, Z(b.y));
-    this.ball.rotation.x += dt * 6;
-    this.ballShadow.position.set(W(b.x), 0.03, Z(b.y));
-    // yayın kamerası: tribünden, topu yumuşakça takip eder
-    const k = Math.min(1, dt * 2.2);
-    this.camT.x = lerp(this.camT.x, W(b.x) * 0.45, k);
-    this.camT.z = lerp(this.camT.z, Z(b.y) * 0.92, k);
-    const portrait = this.camera.aspect < 1;
-    this.camera.position.set(this.camT.x - (portrait ? 30 : 46), portrait ? 30 : 26, this.camT.z * (portrait ? 0.9 : 0.75));
-    this.camera.lookAt(this.camT.x, 0, this.camT.z);
-    this.renderer.render(this.scene, this.camera);
-  }
-  dispose() {
-    try { this.renderer.dispose(); this.renderer.domElement.remove(); } catch { /* yok */ }
-  }
-}
-
 // ---------------- izleyici ----------------
 export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose }) {
   const root = document.getElementById('match');
   root.innerHTML = `<div class="mwrap"><div class="loading">Maç yükleniyor…</div></div>`;
   root.classList.add('show');
-  let closed = false, raf = 0, waitTimer = 0, onResize = null, r2d = null, r3d = null, mode = '2d';
+  let closed = false, raf = 0, waitTimer = 0, onResize = null, r2d = null;
   let fx = null;
   // maç henüz oynanmadıysa (saati gelmedi / sunucu birazdan oynatacak) bekle
   for (;;) {
@@ -380,12 +255,11 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       <div class="mscore"><span id="sH">0</span><i>-</i><span id="sA">0</span><small id="mMin">0'</small>${live ? '<small class="livebadge" id="mLive">● CANLI</small>' : ''}</div>
       <div class="mteam r"><b>${esc(A?.name)}</b>${crestSVG(A, 34)}</div>
     </div>
-    <div class="mstage" id="mStage"><canvas id="pitchCv"></canvas><div class="m3d" id="m3d"></div>
+    <div class="mstage" id="mStage"><canvas id="pitchCv"></canvas>
       <div class="mflash" id="mFlash"></div><div class="mover" id="mOver"></div></div>
     <div class="mctrl ${live ? 'is-live' : ''}">
       <button class="btn sm icon" id="mPlay" title="Oynat/durdur">❚❚</button>
       <div class="seg sm" id="mSpeed">${[1, 2, 4, 8].map((s) => `<button data-s="${s}" class="${s === 2 ? 'on' : ''}">${s}x</button>`).join('')}</div>
-      <div class="seg sm" id="mMode"><button data-m="2d" class="on">2D</button><button data-m="3d">3D</button></div>
       <button class="btn sm" id="mEnd" title="Sona atla">⏭</button>
       <button class="btn sm ghost icon" id="mClose" title="Kapat">✕</button>
     </div>
@@ -393,9 +267,8 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     <div class="mfeed" id="mFeed"></div>
   </div>`;
   const cv = document.getElementById('pitchCv');
-  const host3d = document.getElementById('m3d');
   r2d = new Pitch2D(cv);
-  onResize = () => { r2d.resize(); r3d?.resize(); };
+  onResize = () => r2d.resize();
   window.addEventListener('resize', onResize);
 
   let tm = 0, speed = 2, playing = true, last = performance.now(), shown = 0, flashT = 0;
@@ -520,7 +393,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     const lu = lineupAt(tm);
     const carrier = b.seg.kind !== 'reset' && b.seg.kind !== 'still' && b.k > 0.6 ? { s: b.seg.side, i: b.seg.who } : null;
     const st = { ply, ids: lu.ids, gone: lu.gone, kits, ball: b, carrier, num, name: (id) => names.get(id) || '' };
-    if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
+    r2d.draw(st);
   }
   function endLive() {
     if (!live) return;
@@ -546,25 +419,6 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     playing = !playing; e.target.textContent = playing ? '❚❚' : '▶';
   };
   document.querySelectorAll('#mSpeed button').forEach((b) => (b.onclick = () => { speed = Number(b.dataset.s); document.querySelectorAll('#mSpeed button').forEach((x) => x.classList.toggle('on', x === b)); }));
-  document.querySelectorAll('#mMode button').forEach((b) => (b.onclick = async () => {
-    const m = b.dataset.m;
-    document.querySelectorAll('#mMode button').forEach((x) => x.classList.toggle('on', x === b));
-    mode = m;
-    document.getElementById('mStage').classList.toggle('is3d', m === '3d');
-    if (m === '3d' && !r3d) {
-      overlay('<span class="tag">3D yükleniyor…</span>');
-      try {
-        r3d = new Pitch3D();
-        await r3d.init(host3d, { kits, ids: lineupAt(tm).ids, num });
-        r3d.ready = true; overlay('');
-      } catch (err) {
-        overlay(''); mode = '2d'; r3d = null;
-        document.getElementById('mStage').classList.remove('is3d');
-        document.querySelectorAll('#mMode button').forEach((x) => x.classList.toggle('on', x.dataset.m === '2d'));
-        alert('3D görünüm bu cihazda açılamadı.');
-      }
-    } else if (m === '3d') r3d.resize();
-  }));
   document.getElementById('mEnd').onclick = () => { endLive(); tm = 95; playing = false; pauseT = 0; finish(); };
   document.getElementById('mClose').onclick = close;
   statsHtml();
@@ -581,7 +435,6 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     cancelAnimationFrame(raf);
     clearTimeout(waitTimer);
     if (onResize) window.removeEventListener('resize', onResize);
-    r3d?.dispose();
     root.classList.remove('show'); root.innerHTML = '';
     onClose?.();
   }
