@@ -989,6 +989,7 @@ function renderTaktik() {
     </div>
     <label>Oyun anlayışı: <b id="mLbl">${MENTALITY[d.mentality]}</b>
       <input type="range" id="tMent" min="-2" max="2" step="1" value="${d.mentality}"></label>
+    ${instrHTML(t)}
     <div class="pitch" id="pitch">
       ${sl.map((g, i) => {
         const p = lu[i] ? pv(lu[i]) : null;
@@ -1006,6 +1007,7 @@ function renderTaktik() {
     </div>
   </section>`;
   $('#tForm').onchange = (e) => { d.formation = e.target.value; renderTaktik(); };
+  bindInstr(t);
   $('#tMent').oninput = (e) => { d.mentality = Number(e.target.value); $('#mLbl').textContent = MENTALITY[d.mentality]; $('#tSave').disabled = false; $('#tSave').textContent = 'Taktiği kaydet'; };
   $$('#pitch .slot').forEach((b) => (b.onclick = () => pickForSlot(Number(b.dataset.i), sl, lu)));
   $('#tAuto').onclick = async () => {
@@ -1018,6 +1020,35 @@ function renderTaktik() {
     const r = await act('set_tactics', { p_game: S.gameId, p_formation: d.formation, p_mentality: d.mentality, p_lineup: lu }, { quiet: true });
     if (r.ok) { S.draft = null; toast('Taktik kaydedildi', 'ok'); renderKadro(); }
   };
+}
+// takım talimatları: pres / tempo / genişlik (0-1-2), değişince hemen kaydedilir
+const INSTR = [
+  ['press', 'Pres', ['Düşük', 'Normal', 'Yüksek']],
+  ['tempo', 'Tempo', ['Yavaş', 'Normal', 'Hızlı']],
+  ['width', 'Genişlik', ['Dar', 'Normal', 'Geniş']],
+];
+const INSTR_HINT = {
+  press: ['Geride bekler: savunma sağlam, orta sahada top kazanmak zor.', '', 'Önde basar: orta saha +%3, savunma arkası açık (−%2.5); daha çok kart ve yorgunluk.'],
+  tempo: ['Sabırlı oyun: topa daha çok sahip olur, hücum yavaş (−%3).', '', 'Seri pas, direkt oyun: hücum +%3, topa sahip olma azalır.'],
+  width: ['Ortadan oynar: savunma derli toplu, kanat ortası az.', '', 'Kanatları kullanır: daha çok orta, hücum +%1.5, savunma −%1.'],
+};
+function instrHTML(t) {
+  const has = t && Object.prototype.hasOwnProperty.call(t, 'instr');
+  const ins = { press: 1, tempo: 1, width: 1, ...(t?.instr || {}) };
+  const hints = INSTR.map(([k]) => INSTR_HINT[k][ins[k]]).filter(Boolean);
+  return `<div class="instr" id="instr">
+    <small class="ihead">Takım talimatları</small>
+    ${INSTR.map(([k, l, o]) => `<div class="irow"><span>${l}</span><div class="seg sm" data-k="${k}">${o.map((x, i) => `<button type="button" data-v="${i}" class="${ins[k] === i ? 'on' : ''}" ${has ? '' : 'disabled'}>${x}</button>`).join('')}</div></div>`).join('')}
+    <p class="muted small">${has ? (hints.length ? hints.map(esc).join(' ') : 'Hepsi normal: dengeli oyun.') : 'Talimatlar sunucu güncellemesinden sonra açılacak.'}</p>
+  </div>`;
+}
+function bindInstr(t) {
+  $$('#instr .seg button').forEach((b) => (b.onclick = async () => {
+    const ins = { press: 1, tempo: 1, width: 1, ...(t.instr || {}) };
+    ins[b.parentElement.dataset.k] = Number(b.dataset.v);
+    const r = await act('set_instr', { p_game: S.gameId, p_press: ins.press, p_tempo: ins.tempo, p_width: ins.width }, { quiet: true });
+    if (r?.ok) { t.instr = ins; renderKadro(); }
+  }));
 }
 function pickForSlot(i, sl, lu) {
   const t = me();
