@@ -345,3 +345,14 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .mclose { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line2); background: rgba(8,14,26,.6); color: var(--text); font-size: 14px; cursor: pointer; z-index: 3; }
 .mctrl { flex-wrap: nowrap; } .mctrl .seg.sm button { padding: 6px 8px; }
 .mboard .mteam.r { padding-right: 18px; }
+/* finans */
+.finhero { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; background: linear-gradient(135deg, #14532d, var(--card) 70%); }
+.finhero small { display: block; font-size: 11px; letter-spacing: .08em; }
+.finhero b { font: 800 26px/1.2 var(--disp); }
+.finhero .stars { font-size: 20px; }
+.frow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.frow:last-child { border-bottom: 0; }
+.frow b { font: 800 16px/1 var(--disp); } .frow .pos { color: #86efac; } .frow .neg { color: #fca5a5; }
+.frow.total { border-top: 2px solid var(--line2); margin-top: 6px; font-weight: 700; }
+.vw { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; } .vw small { font-size: 11px; }
+.conf { height: 8px; background: #26324d; border-radius: 4px; overflow: hidden; margin: 8px 0 4px; } .conf i { display: block; height: 100%; border-radius: 4px; }

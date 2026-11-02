@@ -87,3 +87,4 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4b | Ana ekranda hızlı hazırlık maçı (iki gerçek kulüp) | 🟡 011 bekleniyor |
 | 4c | Tek kişilik kariyer: gerçek lig + gerçek kulüp ya da kurmaca takım | 🟡 gerçek kulüp 011 bekliyor, kurmaca hazır |
 | 4d | Yardımcı antrenör maç önü raporu, yönetim hedefi ve güveni, form | ✅ |
+| 4e | FM finansı: oyuncu maaşları, maaş bütçesi, sponsor/TV, bilet, itibar, sezon gelir-gider defteri (Kadro → Finans) | 🟡 011 bekleniyor |

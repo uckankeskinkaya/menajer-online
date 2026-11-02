@@ -774,7 +774,7 @@ function renderOzet() {
     <button class="btn sm" id="btnKit">Forma</button>
   </section>
   <section class="card stats4">
-    <div><small>Bütçe</small><b>${money(t?.budget)}</b></div>
+    <div><small>${isCareer() ? 'Transfer' : 'Bütçe'}</small><b>${money(t?.budget)}</b></div>
     <div><small>Kadro</small><b>${sq.length}</b></div>
     <div><small>İlk 11 gücü</small><b>${lineupOvr || '-'}</b></div>
     <div><small>Sıra</small><b>${hasLeague() ? (S.standings.findIndex((x) => x.team_id === t?.id) + 1 || '-') + '.' : '-'}</b></div>
@@ -874,13 +874,14 @@ function renderOzet() {
 // ---------------- kadro + taktik ----------------
 function renderKadro() {
   const sub = S.sub.kadro || 'kadro';
-  view().innerHTML = `<div class="seg wide" id="kSeg"><button data-s="kadro" class="${sub === 'kadro' ? 'on' : ''}">Kadro</button><button data-s="taktik" class="${sub === 'taktik' ? 'on' : ''}">Taktik</button></div><div id="kBody"></div>`;
+  view().innerHTML = `<div class="seg wide" id="kSeg"><button data-s="kadro" class="${sub === 'kadro' ? 'on' : ''}">Kadro</button><button data-s="taktik" class="${sub === 'taktik' ? 'on' : ''}">Taktik</button><button data-s="finans" class="${sub === 'finans' ? 'on' : ''}">Finans</button></div><div id="kBody"></div>`;
   $$('#kSeg button').forEach((b) => (b.onclick = () => { S.sub.kadro = b.dataset.s; renderKadro(); }));
   if (sub === 'taktik') return renderTaktik();
+  if (sub === 'finans') return renderFinans();
   const t = me();
   const sq = [...S.own.values()].filter((x) => x.team_id === t.id).map((x) => pv(x.player_id));
   const order = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
-  const wage = Math.round(sq.reduce((a, p) => a + Number(p.sq.value), 0) * Number(setting('wage_pct', 0.0015)));
+  const wage = wageBill(t.id);
   sq.sort((a, b) => order[a.grp] - order[b.grp] || b.ovr - a.ovr);
   const val = sq.reduce((a, p) => a + Number(p.sq.value), 0);
   $('#kBody').innerHTML = `
@@ -891,12 +892,55 @@ function renderKadro() {
       const ps = sq.filter((p) => p.grp === g);
       if (!ps.length) return '';
       if (S.sub.kview === 'cards') return `<h3>${GROUPS[g]}</h3><div class="cardgrid">${ps.map((p) => `<div class="prow cardcell ${unavailable(p.sq) ? 'unav' : ''}" data-pid="${p.id}">${fcCard(p, t)}<div class="cc-foot">${statusBadges(p.sq)}${fitBar(p.sq.fitness)}${t.lineup.includes(p.id) ? '<span class="tag on">11</span>' : ''}</div></div>`).join('')}</div>`;
-      return `<h3>${GROUPS[g]}</h3><div class="list">${ps.map((p) => playerRow(p, `${t.lineup.includes(p.id) ? '<span class="tag on">11</span>' : ''}<b>${money(p.sq.value)}</b>`, { mine: true })).join('')}</div>`;
+      return `<h3>${GROUPS[g]}</h3><div class="list">${ps.map((p) => playerRow(p, `${t.lineup.includes(p.id) ? '<span class="tag on">11</span>' : ''}<span class="vw"><b>${money(p.sq.value)}</b><small>${money(p.sq.wage || 0)}/hf</small></span>`, { mine: true })).join('')}</div>`;
     }).join('')}
   </section>`;
   $$('#kBody .prow').forEach((r) => (r.onclick = () => playerModal(Number(r.dataset.pid))));
   $$('#kView button').forEach((b) => (b.onclick = () => { S.sub.kview = b.dataset.v; renderKadro(); }));
 }
+// ---------------- finans (FM tarzı) ----------------
+const wageOf = (v) => Math.max(2000, Math.round((Number(v) * 0.0022) / 1000) * 1000);
+function wageBill(teamId) { return [...S.own.values()].filter((x) => x.team_id === teamId).reduce((a, x) => a + Number(x.wage || wageOf(x.value)), 0); }
+function renderFinans() {
+  const t = me();
+  const fin = t.fin || {};
+  const bill = wageBill(t.id);
+  const wb = Number(t.wage_budget || 0);
+  const inc = Number(t.weekly_income || 0);
+  const ticket = Number(t.ticket || setting('ticket_income', 1000000));
+  const rows = (arr) => arr.map(([k, l, sign]) => `<div class="frow"><span>${l}</span><b class="${sign > 0 ? 'pos' : 'neg'}">${sign > 0 ? '+' : '−'}${money(fin[k] || 0)}</b></div>`).join('');
+  const inn = ['bilet', 'sponsor', 'odul', 'satis'].reduce((a, k) => a + Number(fin[k] || 0), 0);
+  const out = ['maas', 'transfer'].reduce((a, k) => a + Number(fin[k] || 0), 0);
+  const sq = [...S.own.values()].filter((x) => x.team_id === t.id).map((x) => pv(x.player_id)).sort((a, b) => (b.sq.wage || 0) - (a.sq.wage || 0));
+  $('#kBody').innerHTML = `
+  <section class="card finhero">
+    <div><small>TRANSFER BÜTÇESİ</small><b>${money(t.budget)}</b></div>
+    <div><small>KULÜP İTİBARI</small><b class="stars">${'★'.repeat(t.reputation || 0)}<i>${'★'.repeat(Math.max(0, 5 - (t.reputation || 0)))}</i></b></div>
+  </section>
+  <section class="card">
+    <h2>Maaşlar</h2>
+    <div class="row between small"><span>Haftalık maaş gideri</span><b>${money(bill)}</b></div>
+    ${wb ? `<div class="conf"><i style="width:${Math.min(100, (bill / wb) * 100)}%" class="${bill / wb < 0.9 ? 'hi' : bill / wb <= 1 ? 'mid' : 'lo'}"></i></div>
+      <div class="row between small"><span class="muted">Maaş bütçesi ${money(wb)}/hafta</span><span class="muted">Boş: <b>${money(Math.max(0, wb - bill))}</b></span></div>
+      <p class="muted small">Yeni oyuncu alırken maaşı boş maaş bütçesine sığmalı. Oyuncu satmak yer açar.</p>` : '<p class="muted small">Bu odada maaş bütçesi sınırı yok.</p>'}
+  </section>
+  <section class="card">
+    <h2>Haftalık gelir</h2>
+    <div class="frow"><span>Sponsor + yayın geliri</span><b class="pos">+${money(inc)}</b></div>
+    <div class="frow"><span>İç saha bilet geliri (maç başı)</span><b class="pos">+${money(ticket)}</b></div>
+    <div class="frow"><span>Galibiyet / beraberlik primi</span><b class="pos">+${money(setting('win_bonus', 3000000))} / +${money(setting('draw_bonus', 1500000))}</b></div>
+    <div class="frow"><span>Maaşlar</span><b class="neg">−${money(bill)}</b></div>
+  </section>
+  <section class="card">
+    <h2>Bu sezon</h2>
+    <h3>Gelir</h3>${rows([['bilet', 'Bilet', 1], ['sponsor', 'Sponsor ve yayın', 1], ['odul', 'Maç ve sezon ödülleri', 1], ['satis', 'Oyuncu satışları', 1]])}
+    <h3>Gider</h3>${rows([['maas', 'Maaşlar', -1], ['transfer', 'Transferler', -1]])}
+    <div class="frow total"><span>Net</span><b class="${inn - out >= 0 ? 'pos' : 'neg'}">${inn - out >= 0 ? '+' : '−'}${money(Math.abs(inn - out))}</b></div>
+  </section>
+  <section class="card"><h2>En yüksek maaşlar</h2><div class="list">${sq.slice(0, 8).map((p) => playerRow(p, `<span class="vw"><b>${money(p.sq.wage || wageOf(p.sq.value))}</b><small>/hafta</small></span>`, { mine: true })).join('')}</div></section>`;
+  $$('#kBody .prow').forEach((r) => (r.onclick = () => playerModal(Number(r.dataset.pid))));
+}
+
 function playerRow(p, side = '', { mine } = {}) {
   const d = p.ovr - (p.base ?? p.ovr);
   return `<div class="prow ${mine && unavailable(p.sq) ? 'unav' : ''}" data-pid="${p.id}">${mine && p.sq?.shirt ? `<span class="shno">${p.sq.shirt}</span>` : ''}${ovrBadge(p.ovr)}${d ? `<small class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</small>` : ''}${grpBadge(p.grp)}
@@ -1023,6 +1067,7 @@ async function playerModal(pid) {
       <span>${grpBadge(p.grp)} ${esc(p.positions)}</span><span>${p.age} yaş · pot. ${p.pot}${p.ovr !== p.base ? ` · FC26: ${p.base}` : ''}</span><span>${esc(p.nat)}</span>
       <span>${owner ? `${teamDot(owner)} ${esc(owner.name)}` : `🤖 ${esc(p.club)} (${LEAGUES[p.lg] || p.lg})`}</span>
       <span>Değer: <b>${money(value)}</b>${owned?.bought_for > 0 ? ` · alış ${money(owned.bought_for)}` : ''}</span>
+      <span>Maaş: <b>${money(owned?.wage || wageOf(value))}</b>/hafta${owned ? '' : ' (talep)'}</span>
     </div>
     ${owned ? `<div class="pinfo">${statusBadges(owned)}<span>Kondisyon ${fitBar(owned.fitness)} %${owned.fitness}</span><span>Form <b>${Number(owned.form).toFixed(1)}</b></span>${owned.yellows ? `<span>🟨 ${owned.yellows}</span>` : ''}</div>` : ''}
     ${st ? `<div class="pstat"><div><b>${st.apps}</b><small>Maç</small></div><div><b>${st.goals}</b><small>Gol</small></div><div><b>${st.assists}</b><small>Asist</small></div><div><b>${st.rating}</b><small>Ort. puan</small></div><div><b>${st.motm}</b><small>Maçın adamı</small></div></div>` : ''}
@@ -1033,6 +1078,7 @@ async function playerModal(pid) {
       ${active ? `<button class="btn danger ghost" id="pSell">Yapay zekaya sat: ${money(Math.floor(value * (S.game.settings.ai_sell_ratio || 0.75)))}</button>` : ''}`
     : active ? `
       <form id="bidForm" class="form" data-live>
+        ${me()?.wage_budget > 0 ? `<p class="small ${wageBill(me().id) + wageOf(value) > me().wage_budget ? 'warn' : 'muted'}">Maaş talebi ~${money(wageOf(value))}/hafta · boş maaş bütçen ${money(Math.max(0, me().wage_budget - wageBill(me().id)))}/hafta</p>` : ''}
         <label>Teklifin <small class="muted">(kullanılabilir bütçe ${money(avail)})</small>
           <input name="amt" inputmode="decimal" value="${money(Math.max(minNext, myOffer ? Number(myOffer.amount) + 100000 : 0)).replace('€', '')}" autocomplete="off"></label>
         <div class="row wrap quick">
