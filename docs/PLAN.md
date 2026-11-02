@@ -48,14 +48,16 @@ Arkadaş grubunda oyunun akıcı dönmesi için gerekenler.
 
 Bu fazda maç motoruna dokunulduğu için her değişiklikten sonra `mac-motoru` + `sql-test` skill'leriyle gol ortalaması (~2.5) ve güç–puan ilişkisi yeniden ölçülecek.
 
-## Faz 3 — Görsellik (2-3 oturum)
+## Faz 3 — Görsellik ✅ (2 Kasım 2026; 3D iptal)
+
+Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma numarası olan daireler.
 
 | # | Madde | Ayrıntı | Tür |
 |---|---|---|---|
-| 3.1 | **2D izleyiciyi iyileştir** | Oyuncu isimleri/numaraları, gol tekrarı, devre arası ekranı, ses efektleri (isteğe bağlı) | İ |
-| 3.2 | **3D maç izleme (Three.js)** | Aynı olay listesinden; kamera topu takip eder, 2D/3D geçiş düğmesi. Telefon performansı için basit modeller | İ |
-| 3.3 | **Forma/arma editörü** | Renk + desen (düz, çizgili, yarım) + basit arma; sahada ve listelerde görünür | S + İ |
-| 3.4 | **Oyuncu kartları** | FC tarzı kart görünümü (rating, mevki, 6 özellik) | İ |
+| 3.1 | ✅ **2D izleyiciyi iyileştir** | Oyuncu isimleri/numaraları, gol tekrarı, devre arası ekranı, ses efektleri (isteğe bağlı) | İ |
+| 3.2 | ❌ İptal (kullanıcı kararı: 2D yeterli) — **3D maç izleme (Three.js)** | Aynı olay listesinden; kamera topu takip eder, 2D/3D geçiş düğmesi. Telefon performansı için basit modeller | İ |
+| 3.3 | ✅ **Forma/arma editörü** | Renk + desen (düz, çizgili, yarım) + basit arma; sahada ve listelerde görünür | S + İ |
+| 3.4 | ✅ **Oyuncu kartları** | FC tarzı kart görünümü (rating, mevki, 6 özellik) | İ |
 
 ## Faz 4 — Teknik bakım (araya serpiştirilir)
 
