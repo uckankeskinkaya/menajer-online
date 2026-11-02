@@ -32,7 +32,8 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
   (`{m, t: goal|save|miss|yellow, s: h|a, p, a}`) ve `fixtures.stats` olarak kaydedilir. İstemci bunu 2D Canvas'ta kuşbakışı oynatır
   (sonra Three.js ile 3D). Hedef: maç başına ~2.5 gol.
 - **Auth:** e-posta + şifre, kullanıcı adı `raw_user_meta_data.username` → `profiles` (trigger `handle_new_user`).
-  Dashboard'da "Confirm email" kapatılmalı (kullanıcı yapacak).
+  Dashboard'da "Confirm email" kapalı, e-posta sağlayıcısı açık.
+- **Realtime:** publishable key ile kanal anon katılır; kanal açmadan önce `sb.realtime.setAuth(access_token)` şart, yoksa RLS hiçbir olayı geçirmez.
 
 ## Durum
 
@@ -42,12 +43,12 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 003_oyun_mantigi | ✅ uygulandı (kullanıcı SQL Editor'den) ve test edildi |
 | 004_transfer_mac | ✅ uygulandı (maç motoru `execute_sql`, transfer+yetkiler kullanıcı SQL Editor'den `supabase/elle/004_kalan.sql`), test edildi |
 | 005_mac_ayari | ✅ uygulandı: gol sabiti 0.25, şut sabiti 0.21 → 560 maçta 2.49 gol/maç |
-| Web istemcisi (`web/`) | 🟡 yazıldı; giriş ekranı tarayıcıda denendi, oyun akışı uçtan uca henüz test edilmedi |
+| Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
 
 003-005 Supabase'in migration geçmişinde (`list_migrations`) görünmez; elle/`execute_sql` ile uygulandılar. Kaynak doğru olan bu dosyalardır.
-`execute_sql`'de `delete`, `revoke`, `create extension` gibi ifadeler onay ister (60 sn); `create or replace function` ve DO bloklarındaki testler onaysız geçer.
+`execute_sql`'de `delete`, `revoke`, `create extension` gibi ifadeler onay ister (60 sn) ve kullanıcının cihazında bu pencere AÇILMIYOR: böyle SQL'i kullanıcıya SQL Editor'de çalıştırması için ver; `create or replace function` ve DO bloklarındaki testler onaysız geçer.
 Aynı istekte hem değişiklik hem `raise exception`'lı test gönderme: exception değişikliği de geri alır.
 
 İstemci ekranları (mobil öncelikli): giriş/kayıt, oda kur/katıl, lobi + ayarlar, kadro, taktik (diziliş + ilk 11),
