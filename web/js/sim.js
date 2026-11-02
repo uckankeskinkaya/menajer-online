@@ -200,7 +200,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
     if (restart && t >= restart.t) {
       const rh = P[restart.holder];
       const ballThere = restart.kind === 'kickoff' || Math.hypot(ball.x - restart.x, ball.y - restart.y) < 0.3;
-      if ((dist(rh, restart) > 1.5 || !ballThere) && t < restart.t + 4) { /* oyuncu ve top yerine varsın */ } else {
+      if ((dist(rh, restart) > 1.5 || !ballThere) && t < restart.t + (restart.kind === 'corner' ? 10 : 4)) { /* oyuncu ve top yerine varsın */ } else {
         ball.x = restart.x; ball.y = restart.y; ball.z = 0;
         holder = restart.holder; const k = restart.kind; restart = null; dead = null; fallen = -1;
         nextAct = t + (k === 'pen' || k === 'fk' ? 0.6 : k === 'corner' ? 0.7 : 0.35);
@@ -292,7 +292,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
         const tempo = IN[s].tempo, gH = G(s, P[H].y), timeLeft = me.T - t;
         if (me.style === 'corner' && mode.cornerReady) { // korner ortası: golcünün kafasına
           mode.cornerReady = false;
-          passTo(H, me.shooter, { at: me.spot, lofted: true }); flight.arc = 4.5;
+          passTo(H, me.shooter, { at: me.spot, lofted: true }); flight.arc = 4.5; me.delivered = true;
         } else if (me.style === 'corner' && me.setup) { nextAct = t + 0.3; }
         else if (H === me.shooter && me.style !== 'corner') {
           const range = me.style === 'long' ? 36 : 26;
@@ -322,7 +322,8 @@ export function simulateMatch(fx, events, R, ins = {}) {
         me.rescue = true; const sp = P[me.shooter]; passTo(holder, me.shooter, { at: { x: sp.x, y: Yg(s, Math.min(G(s, sp.y) + 3, PL - 9)) }, lofted: dist(P[holder], sp) > 25 });
       }
       // 4) şut
-      if (!me.done && t >= me.T && !dead && (me.style !== 'pen' && me.style !== 'fk' || me.setup) &&
+      const byline = G(s, ball.y) > PL - 4 && Math.abs(ball.x - PW / 2) > 12; // korner bayrağı / çizgi dibi
+      if (!me.done && t >= me.T && !dead && (me.style !== 'pen' && me.style !== 'fk' || me.setup) && (me.style !== 'corner' || !me.cornered || me.delivered) && !byline &&
           ((holder === me.shooter && G(s, ball.y) > PL - (me.style === 'long' ? 36 : me.style === 'fk' ? 33 : 26)) || (t > me.T + 3 && holder !== null && sideOf(holder) === s && G(s, ball.y) > PL - 30) || t > me.T + 9)) {
         if (holder !== me.shooter && holder !== null) me.shooterSwap = holder;
         me.done = true; me.t = t / SPM; me.T = t;
@@ -406,7 +407,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
           const s2 = f.corner, gy = goalY(s2), cx = f.x1 < PW / 2 ? 0.6 : PW - 0.6;
           let tk = J(s2, 2), bd = 1e9;
           const ce = mode && mode.e.style === 'corner' && mode.e.s === s2 && !mode.e.done ? mode.e : null;
-          for (let k = 2; k < 11; k++) { const j = J(s2, k); if (ce && j === ce.shooter) continue; const dd = Math.abs(P[j].x - cx) + Math.abs(G(s2, P[j].y) - PL) * 0.3; if (dd < bd) { bd = dd; tk = j; } }
+          for (let k = 1; k < 11; k++) { const j = J(s2, k); if (ce && j === ce.shooter) continue; const dd = Math.hypot(P[j].x - cx, P[j].y - (gy - dirY(s2) * 0.6)); if (dd < bd) { bd = dd; tk = j; } } // bayrağa en yakın
           corners.push({ t: t / SPM, s: s2 });
           setDead('corner', { side: s2, ev: ce });
           restart = { t: t + 2.2, x: cx, y: gy - dirY(s2) * 0.6, holder: tk, kind: 'corner' };
@@ -496,7 +497,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
 
       if (dead) {
         ({ tx, ty, vmax } = deadTarget(j, s, k, p, ro, tx, ty, vmax));
-        if (restart && j === restart.holder && (dead.kind !== 'goal' || t - dead.t0 > 6.5)) { tx = restart.x; ty = restart.y; vmax = dist(p, restart) > 8 ? RUN : JOG; }
+        if (restart && j === restart.holder && (dead.kind !== 'goal' || t - dead.t0 > 6.5)) { tx = restart.x; ty = restart.y; vmax = dist(p, restart) > 8 ? SPRINT : JOG; }
       } else if (k === 0) {
         const gt = gkTarget(s, j); tx = gt.x; ty = gt.y; vmax = RUN;
         if (flight && flight.kind === 'shot' && flight.gk && flight.gk.j === j && flight.gk.started) { tx = flight.gk.x; ty = flight.gk.y; vmax = 9.5; }
