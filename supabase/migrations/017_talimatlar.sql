@@ -1,5 +1,6 @@
 -- MENAJER ONLINE 017: takım talimatları (pres / tempo / genişlik). SQL Editor'den çalıştır.
 alter table public.teams add column if not exists instr jsonb not null default '{}'::jsonb;
+create index if not exists offers_player_id_idx on public.offers (player_id);  -- get_advisors: indekssiz yabancı anahtar
 
 create or replace function public.set_instr(p_game uuid, p_press int, p_tempo int, p_width int) returns jsonb
 language plpgsql security definer set search_path = '' as $$
