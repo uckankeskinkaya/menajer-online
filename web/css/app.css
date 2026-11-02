@@ -356,3 +356,5 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .frow.total { border-top: 2px solid var(--line2); margin-top: 6px; font-weight: 700; }
 .vw { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; } .vw small { font-size: 11px; }
 .conf { height: 8px; background: #26324d; border-radius: 4px; overflow: hidden; margin: 8px 0 4px; } .conf i { display: block; height: 100%; border-radius: 4px; }
+.stars.mini { font-size: 10px; letter-spacing: 0; }
+.finhero .stars { display: block; font-size: 22px; margin-top: 4px; }

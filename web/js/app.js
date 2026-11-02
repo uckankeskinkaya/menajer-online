@@ -236,7 +236,10 @@ async function clubs() {
   }
   return S.clubs;
 }
-const stars = (pw) => { const n = pw >= 80 ? 5 : pw >= 77 ? 4 : pw >= 74 ? 3 : pw >= 71 ? 2 : 1; return `<span class="stars">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`; };
+// yıldızlar: lig içi sıraya göre (1. → 5, 2-3. → 4, 4. → 3, ilk yarı → 2, kalan → 1) ve Avrupa seviyesi (bütün ligler)
+const leagueStarsN = (rank, n) => (rank === 1 ? 5 : rank <= 3 ? 4 : rank <= Math.max(4, Math.ceil(n * 0.22)) ? 3 : rank <= Math.ceil(n / 2) ? 2 : 1);
+const globalStarsN = (pw) => (pw >= 83 ? 5 : pw >= 80 ? 4 : pw >= 76 ? 3 : pw >= 74 ? 2 : 1);
+const starsHTML = (n, cls = '') => `<span class="stars ${cls}">${'★'.repeat(n)}<i>${'★'.repeat(5 - n)}</i></span>`;
 function clubPicker(id, list, lg, sel) {
   const lgs = Object.keys(LEAGUES);
   return `<div class="row2"><select id="${id}Lg">${lgs.map((k) => `<option value="${k}" ${k === lg ? 'selected' : ''}>${LEAGUES[k]}</option>`).join('')}</select>
@@ -292,7 +295,8 @@ async function careerModal() {
           const cl = list.filter((c) => c.lg === lg);
           $('#cBody', box).innerHTML = `<label>Lig<select id="cLg">${Object.entries(LEAGUES).map(([k, l]) => `<option value="${k}" ${k === lg ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
             <p class="muted small">Bir kulüp seç. Ligin diğer ${cl.length - 1} kulübü gerçek kadrolarıyla yapay zeka olacak. Bütçe kulübün kadro değerine göre.</p>
-            <div class="list scroll clubs">${cl.map((c, i) => `<div class="lrow ${c.club === sel ? 'sel' : ''}" data-c="${esc(c.club)}"><span class="rank">${i + 1}</span><div class="grow"><b>${esc(c.club)}</b><small>${c.players} oyuncu · güç ${c.power}</small></div>${stars(c.power)}</div>`).join('')}</div>
+            <p class="muted small">Büyük yıldızlar lig içindeki yeri, küçükler Avrupa seviyesini gösterir.</p>
+            <div class="list scroll clubs">${cl.map((c, i) => `<div class="lrow ${c.club === sel ? 'sel' : ''}" data-c="${esc(c.club)}"><span class="rank">${i + 1}</span><div class="grow"><b>${esc(c.club)}</b><small>${c.players} oyuncu · güç ${c.power} · Avrupa ${starsHTML(globalStarsN(c.power), 'mini')}</small></div>${starsHTML(leagueStarsN(i + 1, cl.length))}</div>`).join('')}</div>
             <button class="btn primary big" id="cGo" ${sel ? '' : 'disabled'}>${sel ? `${esc(sel)} ile başla` : 'Kulüp seç'}</button>`;
           $('#cLg', box).onchange = (e) => { lg = e.target.value; sel = null; draw(); };
           $$('.clubs .lrow', box).forEach((r) => (r.onclick = () => { sel = r.dataset.c; draw(); }));
@@ -915,7 +919,7 @@ function renderFinans() {
   $('#kBody').innerHTML = `
   <section class="card finhero">
     <div><small>TRANSFER BÜTÇESİ</small><b>${money(t.budget)}</b></div>
-    <div><small>KULÜP İTİBARI</small><b class="stars">${'★'.repeat(t.reputation || 0)}<i>${'★'.repeat(Math.max(0, 5 - (t.reputation || 0)))}</i></b></div>
+    <div><small>KULÜP İTİBARI</small>${starsHTML(t.reputation || (() => { const r = S.teams.map((x) => ({ id: x.id, p: teamPower(x.id) })).sort((a, b) => b.p - a.p); return leagueStarsN(r.findIndex((x) => x.id === t.id) + 1, r.length); })())}</div>
   </section>
   <section class="card">
     <h2>Maaşlar</h2>

@@ -48,6 +48,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 008_faz2 | ✅ kullanıcı SQL Editor'den: maç puanları (`stats.rt`, `motm`), kondisyon/form/gelişim (`squads.fitness/form/ovr_delta`), kart cezası/sakatlık (`ban`/`injury`/`yellows`), maç içi değişiklik, maaş/bilet/ödül, `new_season`, `player_stats`, `games.season/history` |
 | 011_kariyer | ✅ kullanıcı SQL Editor'den: `club_list`, `quick_match` (ana ekrandan gerçek kulüplerle hazırlık maçı, `settings.sandbox` gizli oda), `start_career` (gerçek lig + gerçek kulüp kariyeri, `settings.career`) |
 | 013_kulup_renkleri | ✅ `execute_sql`: büyük kulüplerin gerçek renkleri `_club_team` içinde |
+| 014_itibar | ⏳ 012'den sonra `execute_sql` ile uygulanacak: itibar lig içi sıraya göre (1.→5, 2-3.→4, 4.→3, ilk yarı→2, kalan→1) |
 | 012_finans | ⏳ kullanıcı uygulayacak. FM finansı: `squads.wage` (değerin %0.22'si/hafta, transferde yeniden), `teams.wage_budget/weekly_income/ticket/reputation/fin` (sezon defteri), `_setup_finances` (kariyerlerde kadro değerine göre), maaş bütçesi `place_bid`'de kontrol |
 | 010_forma | ✅ kullanıcı SQL Editor'den uyguladı: `squads.shirt` (trigger ile otomatik), `teams.kit` (desen/arma/sembol), `set_kit` |
 | 009_dinlenme | ✅ `execute_sql`: günlük dinlenme +20, gol sabiti 0.29 → 540 maçta 2.55 gol/maç |
