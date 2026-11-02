@@ -1,8 +1,9 @@
 // Maç izleyici: sunucudaki olay listesinden (fixtures.events) animasyon üretir.
-// 2D kuşbakışı (Canvas): oyuncular içinde forma numarası olan dairelerdir.
+// 2D kuşbakışı (Canvas) ve sevimli 3D (Three.js, istenince yüklenir); ikisi aynı durumdan çizilir, tam senkron.
+// Sadece önemli anlar normal hızda gösterilir; aralar hızla geçer. Oyuncular içinde forma numarası olan dairelerdir.
 // Saha koordinatları 0-1: x en, y boy; ev sahibi y=0 kalesine hücum eder.
 import { esc, slotPositions } from './ui.js';
-import { matchKits, drawDot, crestSVG, numColor } from './kit.js';
+import { matchKits, drawDot, crestSVG, numColor, lum } from './kit.js';
 
 const GOAL_W = 7.32 / 68;      // kale ağzı (saha enine oranla)
 const PL = 105, PW = 68;       // metre
@@ -192,6 +193,154 @@ class Pitch2D {
   dispose() {}
 }
 
+// ---------------- 3D (sevimli, 2D ile aynı durumdan çizilir) ----------------
+const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+function badgeCanvas(kit, num) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  drawDot(c.getContext('2d'), 64, 64, 50, kit, num);
+  return c;
+}
+class Pitch3D {
+  async init(host, st) {
+    const THREE = (this.THREE = await import(THREE_URL));
+    this.host = host;
+    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true }));
+    r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    r.outputColorSpace = THREE.SRGBColorSpace;
+    host.appendChild(r.domElement);
+    const scene = (this.scene = new THREE.Scene());
+    // gökyüzü: yumuşak dikey geçiş
+    const sky = document.createElement('canvas'); sky.width = 4; sky.height = 256;
+    const sg = sky.getContext('2d'); const gr = sg.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#7cc4ff'); gr.addColorStop(0.6, '#c9e9ff'); gr.addColorStop(1, '#eaf7ff');
+    sg.fillStyle = gr; sg.fillRect(0, 0, 4, 256);
+    const skyTex = new THREE.CanvasTexture(sky); skyTex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = skyTex;
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.5, 500);
+    scene.add(new THREE.HemisphereLight('#ffffff', '#7fb87a', 1.6));
+    const sun = new THREE.DirectionalLight('#fff6e0', 1.4); sun.position.set(-40, 80, 30); scene.add(sun);
+    // zemin + saha
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(PW + 60, PL + 60), new THREE.MeshLambertMaterial({ color: '#3f9b4a' }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.03; scene.add(ground);
+    const tc = document.createElement('canvas'); tc.width = 680; tc.height = 1050;
+    drawPitch(tc.getContext('2d'), 0, 0, 680, 1050);
+    const tex = new THREE.CanvasTexture(tc); tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+    const pitch = new THREE.Mesh(new THREE.PlaneGeometry(PW, PL), new THREE.MeshLambertMaterial({ map: tex }));
+    pitch.rotation.x = -Math.PI / 2; scene.add(pitch);
+    // renkli tribünler (oyuncak gibi basamaklar)
+    const standCols = [st.kits.h.c1, '#ffffff', st.kits.a.c1, '#f4d35e'];
+    const addStand = (x, z, w, d, rotY) => {
+      for (let k = 0; k < 4; k++) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.6, 2.4), new THREE.MeshLambertMaterial({ color: standCols[k % 4] }));
+        const g = new THREE.Group(); g.add(m); m.position.set(0, 0.8 + k * 1.6, -k * 2.4);
+        g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
+      }
+    };
+    addStand(-PW / 2 - 9, 0, PL + 6, 0, Math.PI / 2); addStand(PW / 2 + 9, 0, PL + 6, 0, -Math.PI / 2);
+    addStand(0, -PL / 2 - 9, PW + 6, 0, 0); addStand(0, PL / 2 + 9, PW + 6, 0, Math.PI);
+    // kaleler
+    const postMat = new THREE.MeshLambertMaterial({ color: '#ffffff' });
+    const netMat = new THREE.MeshBasicMaterial({ color: '#ffffff', wireframe: true, transparent: true, opacity: 0.45 });
+    for (const zs of [-1, 1]) {
+      const z = (zs * PL) / 2, g = new THREE.Group();
+      for (const xs of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2.44, 12), postMat); p.position.set((xs * 7.32) / 2, 1.22, z); g.add(p); }
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 7.32, 12), postMat); bar.rotation.z = Math.PI / 2; bar.position.set(0, 2.44, z); g.add(bar);
+      const net = new THREE.Mesh(new THREE.BoxGeometry(7.32, 2.44, 2, 12, 4, 3), netMat); net.position.set(0, 1.22, z + zs * 1); g.add(net);
+      scene.add(g);
+    }
+    const blob = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+      const g = x.createRadialGradient(32, 32, 4, 32, 32, 30); g.addColorStop(0, 'rgba(0,0,0,.45)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c); })();
+    this.shadowMat = new THREE.MeshBasicMaterial({ map: blob, transparent: true, depthWrite: false });
+    this.badgeCache = new Map();
+    this.players = { h: [], a: [] };
+    for (const s of ['h', 'a']) for (let i = 0; i < 11; i++) this.players[s].push(this.makePlayer(st, s, i));
+    // top: beyaz, siyah beşgenli
+    const bc = document.createElement('canvas'); bc.width = 128; bc.height = 64; const bx = bc.getContext('2d');
+    bx.fillStyle = '#fff'; bx.fillRect(0, 0, 128, 64); bx.fillStyle = '#1b1f27';
+    for (const [x, y] of [[16, 16], [48, 40], [80, 16], [112, 40], [32, 56], [96, 56]]) { bx.beginPath(); bx.arc(x, y, 7, 0, Math.PI * 2); bx.fill(); }
+    const btex = new THREE.CanvasTexture(bc); btex.colorSpace = THREE.SRGBColorSpace;
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 16), new THREE.MeshLambertMaterial({ map: btex }));
+    scene.add(this.ball);
+    this.ballShadow = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), this.shadowMat); this.ballShadow.rotation.x = -Math.PI / 2; scene.add(this.ballShadow);
+    this.camT = new THREE.Vector3(0, 0, 0);
+    this.t = 0;
+    this.resize();
+  }
+  badge(kit, num) {
+    const key = `${kit.c1}${kit.c2}${num}`;
+    if (!this.badgeCache.has(key)) {
+      const t = new this.THREE.CanvasTexture(badgeCanvas(kit, num)); t.colorSpace = this.THREE.SRGBColorSpace;
+      this.badgeCache.set(key, new this.THREE.SpriteMaterial({ map: t, depthTest: false }));
+    }
+    return this.badgeCache.get(key);
+  }
+  makePlayer(st, s, i) {
+    const THREE = this.THREE;
+    const g = new THREE.Group();
+    const kit = i === 0 ? st.kits[s === 'h' ? 'gkH' : 'gkA'] : st.kits[s];
+    // sevimli oyuncak oyuncu: kısa kapsül gövde, büyük kafa
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 0.7, 6, 14), new THREE.MeshLambertMaterial({ color: kit.c1 }));
+    body.position.y = 1.35; g.add(body);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.22, 16), new THREE.MeshLambertMaterial({ color: kit.c2 }));
+    band.position.y = 1.55; g.add(band);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 16), new THREE.MeshLambertMaterial({ color: '#f1c9a5' }));
+    head.position.y = 2.55; g.add(head);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.64, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2.2), new THREE.MeshLambertMaterial({ color: ['#2b1d14', '#5a3b22', '#d9b36c', '#111111'][(i + (s === 'h' ? 0 : 2)) % 4] }));
+    hair.position.y = 2.6; g.add(hair);
+    for (const xs of [-0.22, 0.22]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: '#1b1f27' }));
+      eye.position.set(xs, 2.6, 0.56); g.add(eye);
+      const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.35, 4, 8), new THREE.MeshLambertMaterial({ color: lum(kit.c1) > 0.6 ? '#1f2937' : kit.c2 }));
+      leg.position.set(xs, 0.45, 0); g.add(leg);
+      const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshLambertMaterial({ color: '#1b1f27' }));
+      shoe.scale.set(1, 0.6, 1.4); shoe.position.set(xs, 0.1, 0.08); g.add(shoe);
+    }
+    const sp = new THREE.Sprite(this.badge(kit, st.num(st.ids[s][i])));
+    sp.scale.set(1.6, 1.6, 1); sp.position.y = 4; sp.renderOrder = 10; g.add(sp);
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), this.shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; g.add(sh);
+    g.scale.setScalar(1.15);
+    g.userData = { sp, id: st.ids[s][i], kit, phase: Math.random() * 6 };
+    this.scene.add(g);
+    return g;
+  }
+  resize() {
+    const b = this.host.getBoundingClientRect();
+    this.renderer.setSize(b.width, b.height);
+    this.camera.aspect = b.width / Math.max(1, b.height); this.camera.updateProjectionMatrix();
+  }
+  draw(st, dt) {
+    this.t += dt;
+    const W = (x) => (x - 0.5) * PW, Z = (y) => (y - 0.5) * PL;
+    for (const s of ['h', 'a']) st.ply[s].forEach((p, i) => {
+      const g = this.players[s][i];
+      const id = st.ids[s][i];
+      g.visible = !!id && !st.gone.has(id);
+      if (g.userData.id !== id && id) { g.userData.sp.material = this.badge(g.userData.kit, st.num(id)); g.userData.id = id; }
+      const nx = W(p.x), nz = Z(p.y);
+      const dx = nx - g.position.x, dz = nz - g.position.z;
+      const moving = Math.hypot(dx, dz) > 0.02;
+      if (moving) g.rotation.y = Math.atan2(dx, dz);
+      g.position.set(nx, moving ? Math.abs(Math.sin(this.t * 12 + g.userData.phase)) * 0.25 : 0, nz);
+      const isC = st.carrier && st.carrier.s === s && st.carrier.i === i;
+      g.userData.sp.scale.setScalar(isC ? 2.1 : 1.6);
+    });
+    const b = st.ball;
+    this.ball.position.set(W(b.x), 0.5 + b.z * 0.4, Z(b.y));
+    this.ball.rotation.x += dt * 8;
+    this.ballShadow.position.set(W(b.x), 0.03, Z(b.y));
+    // yayın kamerası: 2D ile aynı anı, tribün açısından takip eder
+    const k = Math.min(1, dt * 2.4);
+    this.camT.x = lerp(this.camT.x, W(b.x) * 0.5, k);
+    this.camT.z = lerp(this.camT.z, Z(b.y) * 0.9, k);
+    const portrait = this.camera.aspect < 1;
+    this.camera.position.set(this.camT.x - (portrait ? 44 : 46), portrait ? 40 : 28, this.camT.z * (portrait ? 0.85 : 0.75));
+    this.camera.lookAt(this.camT.x, 0, this.camT.z);
+    this.renderer.render(this.scene, this.camera);
+  }
+  dispose() { try { this.renderer.dispose(); this.renderer.domElement.remove(); } catch { /* yok */ } }
+}
+
 // ---------------- izleyici ----------------
 export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose }) {
   const root = document.getElementById('match');
@@ -248,39 +397,55 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.m + 0.2 }));
   const timeline = [...evs, ...others].sort((a, b) => a.t - b.t);
 
+  // ---- önemli anlar: goller, kurtarışlar, kırmızı kartlar ve birkaç kaçırma normal hızda; aralar hızla geçer ----
+  const CLIP_RATE = 0.22;   // normal hız: senaryo dakikası / sn (bir pas ~1.5 sn)
+  const GAP_RATE = 9;       // aralarda saat: maç dakikası / sn
+  const misses = evs.filter((e) => e.ev === 'miss');
+  const pickedMiss = new Set(misses.filter(() => R() < 0.35).slice(0, 4).concat(misses.filter((e) => e.m >= 85).slice(0, 1)));
+  let clips = [];
+  for (const e of evs) {
+    if (e.ev === 'goal' || e.ev === 'save' || pickedMiss.has(e)) clips.push({ from: e.t - 1.35, to: e.t + (e.ev === 'goal' ? 1.3 : 0.6), e, goal: e.ev === 'goal' });
+  }
+  for (const e of others) if (e.ev === 'red') clips.push({ from: e.t - 0.7, to: e.t + 0.3, e });
+  clips.sort((a, b) => a.from - b.from);
+  clips = clips.reduce((acc, c) => { const p = acc[acc.length - 1]; if (p && c.from < p.to) { p.to = Math.max(p.to, c.to); p.goal = p.goal || c.goal; } else acc.push({ ...c }); return acc; }, []);
+  const clipEv = new Set(clips.flatMap((c) => evs.filter((e) => e.t >= c.from && e.t <= c.to)));
+
   root.innerHTML = `
   <div class="mwrap">
-    <div class="mboard">
+    <div class="mboard"><button class="mclose" id="mClose" title="Kapat">✕</button>
       <div class="mteam">${crestSVG(H, 34)}<b>${esc(H?.name)}</b></div>
       <div class="mscore"><span id="sH">0</span><i>-</i><span id="sA">0</span><small id="mMin">0'</small>${live ? '<small class="livebadge" id="mLive">● CANLI</small>' : ''}</div>
       <div class="mteam r"><b>${esc(A?.name)}</b>${crestSVG(A, 34)}</div>
     </div>
-    <div class="mstage" id="mStage"><canvas id="pitchCv"></canvas>
-      <div class="mflash" id="mFlash"></div><div class="mover" id="mOver"></div></div>
+    <div class="mstage" id="mStage"><canvas id="pitchCv"></canvas><div class="m3d" id="m3d"></div>
+      <div class="mphase" id="mPhase"></div><div class="mflash" id="mFlash"></div><div class="mover" id="mOver"></div></div>
     <div class="mctrl ${live ? 'is-live' : ''}">
       <button class="btn sm icon" id="mPlay" title="Oynat/durdur">❚❚</button>
-      <div class="seg sm" id="mSpeed">${[1, 2, 4, 8].map((s) => `<button data-s="${s}" class="${s === 2 ? 'on' : ''}">${s}x</button>`).join('')}</div>
+      <div class="seg sm" id="mSpeed">${[1, 2, 4].map((s) => `<button data-s="${s}" class="${s === 1 ? 'on' : ''}">${s}x</button>`).join('')}</div>
+      <div class="seg sm" id="mMode"><button data-m="2d" class="on">2D</button><button data-m="3d">3D</button></div>
+      <button class="btn sm" id="mNext" title="Sonraki an">⏩</button>
       <button class="btn sm" id="mEnd" title="Sona atla">⏭</button>
-      <button class="btn sm ghost icon" id="mClose" title="Kapat">✕</button>
     </div>
     <div class="mstats" id="mStats"></div>
     <div class="mfeed" id="mFeed"></div>
   </div>`;
   const cv = document.getElementById('pitchCv');
+  const host3d = document.getElementById('m3d');
   r2d = new Pitch2D(cv);
-  onResize = () => r2d.resize();
+  let r3d = null, mode = '2d';
+  onResize = () => { r2d.resize(); r3d?.resize(); };
   window.addEventListener('resize', onResize);
 
-  let tm = 0, speed = 2, playing = true, last = performance.now(), shown = 0, flashT = 0;
-  let pauseT = 0, htShown = false, replay = null, pendingReplay = null;
-  const MIN_PER_SEC = 1.0;
+  // oynatma durumu: clock = ekrandaki maç dakikası, tm = sahada oynatılan senaryo zamanı
+  let clock = 0, tm = 0, speed = 1, playing = true, last = performance.now(), shown = 0, flashT = 0, pauseT = 0;
+  let ci = 0, phase = 'gap', clip = null, replay = null, htShown = false, ended = false;
   const liveT = () => Math.min(95, ((Date.now() - new Date(fx.kickoff_at)) / liveMs) * 95);
   const ply = { h: base.h.map((p) => ({ ...p })), a: base.a.map((p) => ({ ...p })) };
   const feed = document.getElementById('mFeed');
   let sh = 0, sa = 0;
   const ls = { shots: [0, 0], on: [0, 0] };
 
-  // t anındaki sahadakiler (değişiklik) ve atılanlar
   function lineupAt(t) {
     const cur = { h: [...startH], a: [...startA] };
     const gone = new Set();
@@ -311,7 +476,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
         let ty = bs.y + (b.y - 0.5) * (i === 0 ? 0.05 : 0.3) + (attacking && i ? dir * 0.07 : 0);
         if (b.seg.side === s && b.seg.who === i && b.seg.kind !== 'reset') { tx = b.seg.x1; ty = b.seg.y1 + dir * -0.015; }
         if (i === 0) { ty = clamp(ty, s === 'h' ? 0.9 : 0.02, s === 'h' ? 0.98 : 0.1); tx = clamp(tx, 0.4, 0.6); }
-        const sp = snap ? 1 : Math.min(1, dt * Math.max(1, speed) * 2.2);
+        const sp = snap ? 1 : Math.min(1, dt * 2.6);
         p.x = lerp(p.x, clamp(tx, 0.03, 0.97), sp); p.y = lerp(p.y, clamp(ty, 0.01, 0.99), sp);
       });
     }
@@ -326,7 +491,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       ls.shots[si]++; ls.on[si]++;
       document.getElementById('sH').textContent = sh; document.getElementById('sA').textContent = sa;
       txt = `<b>GOL!</b> ${nm(e.p)}${e.a ? ` <small>(asist: ${nm(e.a)})</small>` : ''}`; cls = 'goal';
-      if (!silent) { flash(`GOL! ${names.get(e.p) || ''}`, kits[e.s]); if (!live) pendingReplay = { from: Math.max(0, e.t - 1.3), to: e.t + 0.25, back: e.t + 0.3 }; }
+      if (!silent) flash(`GOL! ${names.get(e.p) || ''}`, kits[e.s]);
     } else if (e.ev === 'save') { ls.shots[si]++; ls.on[si]++; txt = `Kurtarış! ${nm(e.p)} şutu`; cls = 'save'; }
     else if (e.ev === 'miss') { ls.shots[si]++; txt = `${nm(e.p)} auta attı`; cls = 'miss'; }
     else if (e.ev === 'yellow') { txt = `${nm(e.p)}`; cls = 'yellow'; }
@@ -359,41 +524,80 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   function flash(text, kit) {
     const el = document.getElementById('mFlash');
     el.textContent = text; el.style.background = kit?.c1 || '#16a34a'; el.style.color = kit ? numColor(kit) : '#fff';
-    el.classList.add('show'); flashT = 1.6;
+    el.classList.add('show'); flashT = 1.8;
   }
-  function overlay(html) {
-    const el = document.getElementById('mOver');
-    el.innerHTML = html || ''; el.classList.toggle('show', !!html);
+  function overlay(html) { const el = document.getElementById('mOver'); el.innerHTML = html || ''; el.classList.toggle('show', !!html); }
+  function phaseLabel(txt) { const el = document.getElementById('mPhase'); el.textContent = txt || ''; el.classList.toggle('show', !!txt); }
+
+  // sıradaki olayları yayınla: önemli an olayları sahnede (tm), diğerleri saatle (clock)
+  function pump() {
+    while (shown < timeline.length) {
+      const e = timeline[shown];
+      const due = clipEv.has(e) ? (tm >= e.t && phase === 'clip') || clock > e.t + 1.2 : clock >= e.t;
+      if (!due) break;
+      emit(e, !(clipEv.has(e) || e.ev === 'red'));
+      shown++;
+    }
   }
+  function startClip(c) {
+    clip = c; phase = 'clip'; tm = c.from; clock = Math.max(clock, c.from);
+    phaseLabel('');
+    document.getElementById('mStage').classList.add('cut');
+    setTimeout(() => document.getElementById('mStage')?.classList.remove('cut'), 250);
+  }
+  function nextClipIndex() { while (ci < clips.length && clips[ci].to < clock - 0.2) ci++; return ci; }
 
   function step(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (live) tm = liveT();
-    else if (pauseT > 0) { pauseT -= dt; if (pauseT <= 0) overlay(''); }
-    else if (playing) tm = Math.min(95, tm + dt * MIN_PER_SEC * (replay ? 0.55 : speed));
     if (flashT > 0) { flashT -= dt; if (flashT <= 0) document.getElementById('mFlash').classList.remove('show'); }
-    // gol tekrarı
-    if (pendingReplay && flashT < 0.4 && !live) { replay = pendingReplay; pendingReplay = null; tm = replay.from; overlay('<span class="tag rep">TEKRAR</span>'); }
-    if (replay && tm >= replay.to) { tm = replay.back; replay = null; overlay(''); }
-    if (!replay) while (shown < timeline.length && timeline[shown].t <= tm) emit(timeline[shown++]);
+    if (pauseT > 0) { pauseT -= dt; if (pauseT <= 0) overlay(''); }
+    else if ((playing || live) && !ended) advance(dt);
     // ilk yarı sonu
-    if (!htShown && tm >= 45 && tm < 46.5 && !replay) {
+    if (!htShown && clock >= 45 && phase !== 'clip') {
       htShown = true;
       overlay(`<div class="ht"><small>İLK YARI SONU</small><b>${sh} - ${sa}</b></div>`);
-      if (!live) pauseT = 1.8; else setTimeout(() => overlay(''), 4000);
+      if (!live) pauseT = 2; else setTimeout(() => overlay(''), 4000);
     }
-    document.getElementById('mMin').textContent = tm >= 94.9 ? 'MS' : `${Math.min(90, Math.floor(tm))}'${tm > 90 ? '+' : ''}`;
-    if (tm >= 95 && (playing || live) && !replay) { playing = false; endLive(); finish(); }
+    document.getElementById('mMin').textContent = ended ? (fx.pens ? `MS · pen. ${fx.pens}` : 'MS') : `${Math.min(90, Math.floor(clock))}'${clock > 90 ? '+' : ''}`;
     render(dt);
     raf = requestAnimationFrame(step);
   }
+  function advance(dt) {
+    const sp = live ? 1 : speed;
+    if (live) clock = Math.max(clock, liveT());
+    if (phase === 'clip') {
+      if (replay) {
+        tm += dt * CLIP_RATE * 0.5 * sp;
+        if (tm >= replay.to) { replay = null; overlay(''); endClip(); }
+      } else {
+        tm += dt * CLIP_RATE * sp;
+        if (!live) clock = Math.max(clock, Math.min(tm, 90));
+        if (tm >= clip.to) {
+          if (clip.goal && !live) { replay = { to: clip.e.t + 0.15 }; tm = clip.e.t - 0.6; overlay('<span class="tag rep">TEKRAR</span>'); }
+          else endClip();
+        }
+      }
+    } else {
+      // ara: sahada sakin oyun normal hızda, saat hızla bir sonraki ana koşar
+      const i = nextClipIndex();
+      const nxt = clips[i];
+      if (!live) clock = Math.min(nxt ? nxt.from : 95, clock + dt * GAP_RATE * sp);
+      const cap = nxt ? nxt.from - 0.1 : 95;
+      tm = Math.min(cap, tm + dt * CLIP_RATE * sp);
+      phaseLabel(nxt && !live && clock < nxt.from - 1 ? '⏩' : '');
+      if (nxt && clock >= nxt.from) { ci = i + 1; startClip(nxt); }
+      else if (!nxt && clock >= (live ? 95 : 94.9)) finish();
+    }
+    pump();
+  }
+  function endClip() { phase = 'gap'; tm = clip.to; clip = null; }
   function render(dt) {
     const b = ballAt(tm);
     movePlayers(b, dt, false);
-    const lu = lineupAt(tm);
-    const carrier = b.seg.kind !== 'reset' && b.seg.kind !== 'still' && b.k > 0.6 ? { s: b.seg.side, i: b.seg.who } : null;
+    const lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock));
+    const carrier = b.seg.kind !== 'reset' && b.seg.kind !== 'still' && b.k > 0.55 ? { s: b.seg.side, i: b.seg.who } : null;
     const st = { ply, ids: lu.ids, gone: lu.gone, kits, ball: b, carrier, num, name: (id) => names.get(id) || '' };
-    r2d.draw(st);
+    if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
   }
   function endLive() {
     if (!live) return;
@@ -402,39 +606,75 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     document.querySelector('.mctrl')?.classList.remove('is-live');
   }
   function finish() {
-    replay = null; pendingReplay = null; overlay('');
+    if (ended) return;
+    ended = true; endLive();
+    replay = null; overlay(''); phaseLabel('');
+    clock = 95;
     while (shown < timeline.length) emit(timeline[shown++], true);
     document.getElementById('sH').textContent = fx.hg; document.getElementById('sA').textContent = fx.ag;
-    document.getElementById('mMin').textContent = fx.pens ? `MS · pen. ${fx.pens}` : 'MS';
     document.getElementById('mPlay').textContent = '↺';
     statsHtml(true);
   }
+  function restart() {
+    ended = false; clock = 0; tm = 0; ci = 0; phase = 'gap'; clip = null; replay = null; shown = 0; sh = sa = 0; htShown = false;
+    ls.shots = [0, 0]; ls.on = [0, 0]; feed.innerHTML = '';
+    document.getElementById('sH').textContent = 0; document.getElementById('sA').textContent = 0;
+    statsHtml(); playing = true; document.getElementById('mPlay').textContent = '❚❚';
+  }
 
   document.getElementById('mPlay').onclick = (e) => {
-    if (tm >= 95) {
-      tm = 0; shown = 0; sh = sa = 0; htShown = false; ls.shots = [0, 0]; ls.on = [0, 0]; feed.innerHTML = '';
-      document.getElementById('sH').textContent = 0; document.getElementById('sA').textContent = 0;
-      statsHtml(); playing = true; e.target.textContent = '❚❚'; return;
-    }
+    if (ended) return restart();
     playing = !playing; e.target.textContent = playing ? '❚❚' : '▶';
   };
   document.querySelectorAll('#mSpeed button').forEach((b) => (b.onclick = () => { speed = Number(b.dataset.s); document.querySelectorAll('#mSpeed button').forEach((x) => x.classList.toggle('on', x === b)); }));
-  document.getElementById('mEnd').onclick = () => { endLive(); tm = 95; playing = false; pauseT = 0; finish(); };
+  document.getElementById('mNext').onclick = () => {
+    if (ended || live) return;
+    pauseT = 0; overlay('');
+    if (phase === 'clip') { replay = null; tm = clip.to; endClip(); }
+    const nxt = clips[nextClipIndex()];
+    if (nxt) { clock = nxt.from; ci++; startClip(nxt); pump(); } else finish();
+  };
+  document.querySelectorAll('#mMode button').forEach((b) => (b.onclick = async () => {
+    const m = b.dataset.m;
+    document.querySelectorAll('#mMode button').forEach((x) => x.classList.toggle('on', x === b));
+    mode = m;
+    document.getElementById('mStage').classList.toggle('is3d', m === '3d');
+    try { localStorage.setItem('mac-mod', m); } catch { /* yok */ }
+    if (m === '3d' && !r3d) {
+      overlay('<span class="tag">3D yükleniyor…</span>');
+      try {
+        r3d = new Pitch3D();
+        await r3d.init(host3d, { kits, ids: lineupAt(clock).ids, num });
+        r3d.ready = true; overlay('');
+      } catch {
+        overlay(''); mode = '2d'; r3d = null;
+        document.getElementById('mStage').classList.remove('is3d');
+        document.querySelectorAll('#mMode button').forEach((x) => x.classList.toggle('on', x.dataset.m === '2d'));
+        alert('3D görünüm bu cihazda açılamadı.');
+      }
+    } else if (m === '3d') r3d.resize();
+    else r2d.resize();
+  }));
+  document.getElementById('mEnd').onclick = () => { pauseT = 0; finish(); };
   document.getElementById('mClose').onclick = close;
   statsHtml();
   if (live) {
-    tm = liveT();
-    while (shown < timeline.length && timeline[shown].t <= tm) emit(timeline[shown++], true);
-    if (tm > 46.5) htShown = true;
+    clock = liveT();
+    while (shown < timeline.length && timeline[shown].t <= clock - 0.3) emit(timeline[shown++], true);
+    if (clock > 46) htShown = true;
+    tm = clock;
+    nextClipIndex();
   }
   movePlayers(ballAt(tm), 0, true);
   raf = requestAnimationFrame(step);
+  try { if (localStorage.getItem('mac-mod') === '3d') document.querySelector('#mMode button[data-m="3d"]').click(); } catch { /* yok */ }
 
   function close() {
     closed = true;
     cancelAnimationFrame(raf);
     clearTimeout(waitTimer);
     if (onResize) window.removeEventListener('resize', onResize);
+    r3d?.dispose();
     root.classList.remove('show'); root.innerHTML = '';
     onClose?.();
   }

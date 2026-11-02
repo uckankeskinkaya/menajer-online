@@ -48,14 +48,14 @@ Arkadaş grubunda oyunun akıcı dönmesi için gerekenler.
 
 Bu fazda maç motoruna dokunulduğu için her değişiklikten sonra `mac-motoru` + `sql-test` skill'leriyle gol ortalaması (~2.5) ve güç–puan ilişkisi yeniden ölçülecek.
 
-## Faz 3 — Görsellik ✅ (2 Kasım 2026; 3D iptal)
+## Faz 3 — Görsellik ✅ (2 Kasım 2026)
 
 Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma numarası olan daireler.
 
 | # | Madde | Ayrıntı | Tür |
 |---|---|---|---|
 | 3.1 | ✅ **2D izleyiciyi iyileştir** | Oyuncu isimleri/numaraları, gol tekrarı, devre arası ekranı, ses efektleri (isteğe bağlı) | İ |
-| 3.2 | ❌ İptal (kullanıcı kararı: 2D yeterli) — **3D maç izleme (Three.js)** | Aynı olay listesinden; kamera topu takip eder, 2D/3D geçiş düğmesi. Telefon performansı için basit modeller | İ |
+| 3.2 | ✅ (kullanıcı isteğiyle geri geldi: sevimli ve 2D ile tam senkron) **3D maç izleme (Three.js)** | Aynı olay listesinden; kamera topu takip eder, 2D/3D geçiş düğmesi. Telefon performansı için basit modeller | İ |
 | 3.3 | ✅ **Forma/arma editörü** | Renk + desen (düz, çizgili, yarım) + basit arma; sahada ve listelerde görünür | S + İ |
 | 3.4 | ✅ **Oyuncu kartları** | FC tarzı kart görünümü (rating, mevki, 6 özellik) | İ |
 
@@ -78,3 +78,13 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 3. Her madde: sunucu tarafı geri alınan testlerle denenir → istemci → canlı sitede iki hesapla deneme → PR → `main` (site birkaç dakikada güncellenir).
 4. Silme/yetki gerektiren SQL olursa sana SQL Editor'de çalıştırman için kısa bir komut veririm (Supabase onay penceresi cihazında açılmıyor).
 5. Bu dosya her oturum sonunda güncellenir.
+
+## Faz 4 — FM havası ve tek kişilik oyun 🟡
+
+| # | Madde | Durum |
+|---|---|---|
+| 4a | Maçta sadece önemli anlar, normal hızda (⏩ sonraki an) | ✅ |
+| 4b | Ana ekranda hızlı hazırlık maçı (iki gerçek kulüp) | 🟡 011 bekleniyor |
+| 4c | Tek kişilik kariyer: gerçek lig + gerçek kulüp ya da kurmaca takım | 🟡 gerçek kulüp 011 bekliyor, kurmaca hazır |
+| 4d | Yardımcı antrenör maç önü raporu, yönetim hedefi ve güveni, form | ✅ |
+| 4e | FM finansı: oyuncu maaşları, maaş bütçesi, sponsor/TV, bilet, itibar, sezon gelir-gider defteri (Kadro → Finans) | 🟡 011 bekleniyor |
