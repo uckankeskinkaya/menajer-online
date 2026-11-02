@@ -15,72 +15,6 @@ function rng(seed) { // mulberry32: aynı maç her izlendiğinde aynı akış
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// ---------------- senaryo: top hareketleri ----------------
-function buildScript(fx, R) {
-  const fh = fx.stats?.fh || '4-4-2', fa = fx.stats?.fa || '4-4-2';
-  const base = {
-    h: slotPositions(fh).map((p) => ({ x: p.x, y: 0.5 + (p.y - 0.5) * 0.92 })),
-    a: slotPositions(fa).map((p) => ({ x: 1 - p.x, y: 0.5 - (p.y - 0.5) * 0.92 })),
-  };
-  const poss = (fx.stats?.poss?.[0] ?? 50) / 100;
-  const evs = (fx.events || []).map((e, i) => ({ ...e, i })).sort((a, b) => a.m - b.m || a.i - b.i);
-  let lastT = -1;
-  for (const e of evs) { e.t = Math.max(e.m - 0.5 + R() * 0.4, lastT + 1.6); lastT = e.t; }
-  const segs = [];
-  let t = 0, side = R() < poss ? 'h' : 'a', who = 9, x = 0.5, y = 0.5;
-  const goalY = (s) => (s === 'h' ? 0 : 1);
-  const fwdSlots = (form) => { const n = form.split('-').map(Number); return Array.from({ length: n[n.length - 1] }, (_, k) => 10 - k); };
-  const push = (t1, x1, y1, kind, nside = side, nwho = who) => {
-    segs.push({ t0: t, t1, x0: x, y0: y, x1, y1, side: nside, who: nwho, kind });
-    t = t1; x = x1; y = y1; side = nside; who = nwho;
-  };
-  const targetOf = (s, idx, adv) => {
-    const b = base[s][idx];
-    const dir = s === 'h' ? -1 : 1;
-    return { x: clamp(b.x + (R() - 0.5) * 0.12, 0.05, 0.95), y: clamp(b.y + dir * adv + (R() - 0.5) * 0.08, 0.04, 0.96) };
-  };
-  const passUntil = (tEnd) => {
-    while (t < tEnd - 0.35) {
-      const dur = 0.25 + R() * 0.35;
-      if (t + dur > tEnd) break;
-      if (R() < 0.18) side = R() < poss ? 'h' : 'a';
-      const idx = 1 + Math.floor(R() * 10);
-      const p = targetOf(side, idx, 0.05 + R() * 0.12);
-      push(t + dur, p.x, p.y, 'pass', side, idx);
-    }
-  };
-  for (const e of evs) {
-    if (e.t - 1.2 > t) passUntil(e.t - 1.2);
-    if (e.t < t + 1.2) e.t = t + 1.2;
-    const s = e.s;
-    const fwd = fwdSlots(s === 'h' ? fh : fa);
-    const shooterIdx = e.slot ?? fwd[Math.floor(R() * fwd.length)] ?? 10;
-    const gy = goalY(s), dir = s === 'h' ? 1 : -1;
-    push(e.t - 0.75, 0.25 + R() * 0.5, gy + dir * (0.3 + R() * 0.1), 'pass', s, 7);
-    push(e.t - 0.25, clamp(0.5 + (R() - 0.5) * 0.4, 0.15, 0.85), gy + dir * (0.1 + R() * 0.1), 'carry', s, shooterIdx);
-    const other = s === 'h' ? 'a' : 'h';
-    if (e.ev === 'goal') {
-      const gx = 0.5 + (R() - 0.5) * GOAL_W * 0.8;
-      push(e.t, gx, gy - dir * 0.012, 'shot', s, shooterIdx);
-      push(e.t + 1.4, gx, gy - dir * 0.012, 'still', s, shooterIdx);
-      push(e.t + 1.6, 0.5, 0.5, 'reset', other, 10);
-    } else if (e.ev === 'save') {
-      const gk = { x: 0.5 + (R() - 0.5) * GOAL_W * 0.7, y: gy + dir * 0.03 };
-      push(e.t, gk.x, gk.y, 'shot', s, shooterIdx);
-      push(e.t + 0.6, gk.x, gk.y, 'still', other, 0);
-      const p = targetOf(other, 1 + Math.floor(R() * 4), 0.05);
-      push(e.t + 1.0, p.x, p.y, 'pass', other, 2);
-    } else {
-      const wide = R() < 0.5 ? 0.5 - GOAL_W * (0.7 + R()) : 0.5 + GOAL_W * (0.7 + R());
-      push(e.t, clamp(wide, 0.05, 0.95), gy - dir * 0.02, 'shot', s, shooterIdx);
-      push(e.t + 0.6, 0.5 + (R() - 0.5) * 0.2, gy + dir * 0.06, 'reset', other, 0);
-    }
-  }
-  passUntil(95);
-  push(Math.max(t + 0.5, 95), x, y, 'still');
-  return { segs, base, evs };
-}
-
 // ---------------- saha çizimi (2D ve 3D dokusu ortak) ----------------
 function drawPitch(ctx, L, T, w, h) {
   // çim: biçilmiş şeritler + hafif doku
@@ -182,8 +116,8 @@ class Pitch2D {
     }
     const b = st.ball, r = Math.max(3.5, w * 0.014);
     ctx.fillStyle = 'rgba(0,0,0,.35)';
-    ctx.beginPath(); ctx.ellipse(X(b.x) + b.z * 0.4, Y(b.y) + 2, r, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-    const by = Y(b.y) - b.z;
+    ctx.beginPath(); ctx.ellipse(X(b.x) + b.z * 0.8, Y(b.y) + 2, r, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+    const by = Y(b.y) - b.z * 2.4;
     const gr = ctx.createRadialGradient(X(b.x) - r * 0.4, by - r * 0.4, r * 0.2, X(b.x), by, r);
     gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#cfd6e0');
     ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X(b.x), by, r, 0, Math.PI * 2); ctx.fill();
@@ -191,6 +125,233 @@ class Pitch2D {
     ctx.fillStyle = '#1b1f27'; ctx.beginPath(); ctx.arc(X(b.x), by, r * 0.35, 0, Math.PI * 2); ctx.fill();
   }
   dispose() {}
+}
+
+// ---------------- maç simülasyonu (izlemeden önce, kare kare, gerçekçi hızlarla) ----------------
+// Senaryo zamanı "dakika"dır; normal izleme hızında 1 senaryo dakikası VIEW saniye sürer.
+// Oyuncular metre cinsinden, hız ve ivme sınırıyla hareket eder; top pas/şut uçuşlarıyla gider.
+// Çıktı: her DT için 22 oyuncunun ve topun konumu + topu tutan oyuncu (2D ve 3D aynı kareleri çizer).
+const SIM_DT = 0.02;
+const VIEW = 1 / 0.22;          // normal hızda 1 senaryo dakikası ≈ 4.5 sn
+const FRAME = 22 * 2 + 4;               // oyuncular (x,y) + top (x,y,z) + tutan
+const JOG = 4.2, RUN = 7.2, WALK = 2.2; // m/s (izleme saniyesi)
+const PASS_V = 19, SHOT_V = 30;         // m/s
+
+function simulateMatch(fx, events, R) {
+  const fh = fx.stats?.fh || '4-4-2', fa = fx.stats?.fa || '4-4-2';
+  const base = {
+    h: slotPositions(fh).map((p) => ({ x: p.x, y: 0.5 + (p.y - 0.5) * 0.92 })),
+    a: slotPositions(fa).map((p) => ({ x: 1 - p.x, y: 0.5 - (p.y - 0.5) * 0.92 })),
+  };
+  const sideOf = (j) => (j < 11 ? 'h' : 'a');
+  const slotOf = (j) => j % 11;
+  const J = (s, k) => (s === 'h' ? 0 : 11) + k;
+  const dirY = (s) => (s === 'h' ? -1 : 1);            // hücum yönü (y)
+  const goalLine = (s) => (s === 'h' ? 0 : 1);         // s'nin hücum ettiği kale çizgisi
+  const B = (j) => base[sideOf(j)][slotOf(j)];
+  const poss = Math.min(0.7, Math.max(0.3, (fx.stats?.poss?.[0] ?? 50) / 100));
+
+  // olay zamanları: dakikaya yakın, aralarında hücum + kutlama için yeterli boşluk
+  const shots = events.filter((e) => ['goal', 'save', 'miss'].includes(e.ev)).map((e, i) => ({ ...e, i })).sort((a, b) => a.m - b.m || a.i - b.i);
+  let last = 0.6, lastGoal = false;
+  for (const e of shots) {
+    e.t = Math.max(e.m - 0.4 + R() * 0.3, last + (lastGoal ? 2.9 : 2.0)); last = e.t; lastGoal = e.ev === 'goal';
+    e.shooter = (e.s === 'h' ? 0 : 11) + (e.slot ?? (8 + Math.floor(R() * 3)));
+  }
+  const T_END = Math.max(95, last + 14);
+  const N = Math.ceil(T_END / SIM_DT) + 2;
+  const frames = new Float32Array(N * FRAME);
+
+  // durum (metre)
+  const P = [];
+  for (let j = 0; j < 22; j++) { const b = B(j); P.push({ x: b.x * PW, y: (0.5 + (b.y - 0.5) * 0.5) * PL, vx: 0, vy: 0 }); }
+  const ball = { x: PW / 2, y: PL / 2, z: 0 };
+  let holder = J(R() < poss ? 'h' : 'a', 10), flight = null, nextAct = 0.25, dead = null, ei = 0, restart = null;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const possSide = () => (holder !== null ? sideOf(holder) : flight ? flight.side : null);
+  const nearest = (s, pt, skipGK = true, skip = -1) => {
+    let best = -1, bd = 1e9;
+    for (let k = skipGK ? 1 : 0; k < 11; k++) { const j = J(s, k); if (j === skip) continue; const d = dist(P[j], pt); if (d < bd) { bd = d; best = j; } }
+    return best;
+  };
+  const progress = (s, y) => (s === 'h' ? 1 - y / PL : y / PL); // 0 kendi kalesi → 1 rakip kalesi
+
+  function startFlight(to, x1, y1, kind, side, dur, arc) {
+    flight = { x0: ball.x, y0: ball.y, x1, y1, t0: t, t1: t + dur, kind, to, side, arc };
+    holder = null;
+  }
+  function pass(from, forceTo = -1, interceptBy = null) {
+    const s = sideOf(from);
+    let to = forceTo;
+    if (to < 0) {
+      // aday: ileri, açık, 10-35 m arası; son üçte birde sebepsiz ilerleme yok (şut sadece olaylarda)
+      const deep = progress(s, P[from].y) > 0.72;
+      let tot = 0; const w = [];
+      for (let k = 1; k < 11; k++) {
+        const j = J(s, k); if (j === from) { w.push(0); continue; }
+        const d = dist(P[j], P[from]);
+        const opp = nearest(s === 'h' ? 'a' : 'h', P[j], false);
+        const open = Math.min(1, dist(P[opp], P[j]) / 8);
+        const fwd = progress(s, P[j].y) - progress(s, P[from].y);
+        let wt = (d > 8 && d < 38 ? 1 : 0.15) * (0.3 + open) * (deep ? (fwd < 0.05 ? 1.4 : 0.3) : 1 + Math.max(-0.5, fwd * 3));
+        w.push(Math.max(0.01, wt)); tot += Math.max(0.01, wt);
+      }
+      let r = R() * tot; to = J(s, 1);
+      for (let k = 1; k < 11; k++) { r -= w[k - 1]; if (r <= 0) { to = J(s, k); break; } }
+    }
+    const tp = P[to];
+    const lead = 2 + R() * 3;
+    let x1 = Math.min(PW - 2, Math.max(2, tp.x + (R() - 0.5) * 4));
+    let y1 = Math.min(PL - 2, Math.max(2, tp.y + dirY(s) * lead));
+    let target = to;
+    if (interceptBy !== null) { // araya giren: pas yolunun ortasında
+      const f = 0.45 + R() * 0.3;
+      x1 = ball.x + (x1 - ball.x) * f; y1 = ball.y + (y1 - ball.y) * f; target = interceptBy;
+    }
+    const d = Math.hypot(x1 - ball.x, y1 - ball.y);
+    startFlight(target, x1, y1, 'pass', interceptBy !== null ? sideOf(interceptBy) : s, d / (PASS_V * VIEW) + 0.03, d > 25 ? Math.min(6, d * 0.12) : 0.3);
+  }
+
+  let t = 0;
+  for (let n = 0; n < N; n++) {
+    t = n * SIM_DT;
+    const ev = shots[ei];
+    // ---- top / karar
+    if (restart && t >= restart.t) { // santra ya da kale vuruşu
+      ball.x = restart.x; ball.y = restart.y; ball.z = 0; flight = null; holder = restart.holder;
+      nextAct = t + 0.25; restart = null; dead = null;
+    }
+    if (ev && !ev.done && t >= ev.t && !dead && (holder === ev.shooter || t >= ev.t + 1.6)) {
+      // gecikme olduysa sonraki olayları kaydır (gol sonrası santraya yer kalsın)
+      ev.t = t;
+      let lt = t, lg = ev.ev === 'goal';
+      for (let q = ei + 1; q < shots.length; q++) { shots[q].t = Math.max(shots[q].t, lt + (lg ? 2.9 : 2.0)); lt = shots[q].t; lg = shots[q].ev === 'goal'; }
+      // ŞUT: şutçu yerinde kalır, sadece top gider
+      const s = ev.s, gl = goalLine(s) * PL, dfn = s === 'h' ? 'a' : 'h', gk = J(dfn, 0);
+      let x1, y1;
+      if (ev.ev === 'goal') { x1 = PW / 2 + (R() - 0.5) * 6; y1 = gl + dirY(s) * 1.2; }
+      else if (ev.ev === 'save') { x1 = PW / 2 + (R() - 0.5) * 4.5; y1 = gl - dirY(s) * 1.2; }
+      else { x1 = PW / 2 + (R() < 0.5 ? -1 : 1) * (4.5 + R() * 5); y1 = gl + dirY(s) * 2.5; }
+      const d = Math.hypot(x1 - ball.x, y1 - ball.y);
+      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * VIEW) + 0.02, R() < 0.4 ? 1.6 : 0.4);
+      flight.ev = ev.ev; flight.side = s; flight.ref = ev;
+      ev.done = true; ei++;
+    }
+    if (flight && t >= flight.t1) {
+      ball.x = flight.x1; ball.y = flight.y1; ball.z = 0;
+      const f = flight; flight = null;
+      if (f.kind === 'shot') {
+        f.ref.ta = t; // top kaleye/kaleciye ulaştı
+        const dfn = f.side === 'h' ? 'a' : 'h';
+        if (f.ev === 'goal') { dead = { kind: 'goal' }; restart = { t: t + 1.45, x: PW / 2, y: PL / 2, holder: J(dfn, 10) }; }
+        else if (f.ev === 'save') { holder = J(dfn, 0); nextAct = t + 0.45; }
+        else { dead = { kind: 'out' }; const gk = J(dfn, 0); restart = { t: t + 0.5, x: PW / 2 + (R() - 0.5) * 8, y: goalLine(f.side) * PL - dirY(f.side) * 5.5, holder: gk, kick: true }; }
+      } else { holder = f.to; nextAct = t + 0.12 + R() * 0.22; }
+    }
+    // hücum hazırlığı: sıradaki olayın takımı topu alır, kaleye ilerler, son anda topu şutçuya verir
+    const nev = shots[ei];
+    const attack = nev && t >= nev.t - 1.4 && !dead;
+    if (holder !== null && !dead) {
+      const s = sideOf(holder);
+      if (attack && s !== nev.s && t >= nextAct) { // top kaybı: en yakın rakip kapar
+        const tk = nearest(nev.s, P[holder]); holder = tk; nextAct = t + 0.15;
+      } else if (attack && s === nev.s) {
+        const shooter = nev.shooter;
+        if (t >= nev.t - 0.4 && holder !== shooter && t >= nextAct) pass(holder, shooter);
+        else if (t >= nextAct && holder !== shooter) {
+          // ileri pas: rakip kaleye en yakın oyunculardan biri
+          let best = -1, bp = -1;
+          for (let k = 2; k < 11; k++) { const j = J(s, k); if (j === holder) continue; const pr = progress(s, P[j].y) + R() * 0.15; if (pr > bp) { bp = pr; best = j; } }
+          pass(holder, best);
+        }
+      } else if (t >= nextAct) {
+        const ps = sideOf(holder);
+        const share = ps === 'h' ? poss : 1 - poss;
+        const intercept = R() < 0.1 + (0.5 - share) * 0.25;
+        if (intercept) { const opp = nearest(ps === 'h' ? 'a' : 'h', P[holder]); pass(holder, -1, opp); }
+        else pass(holder);
+      }
+    }
+    // ---- oyuncular
+    const ps = possSide();
+    const presser = holder !== null ? nearest(sideOf(holder) === 'h' ? 'a' : 'h', P[holder]) : -1;
+    const bx = (flight ? flight.x1 : ball.x) / PW, by = (flight ? flight.y1 : ball.y) / PL;
+    for (let j = 0; j < 22; j++) {
+      const s = sideOf(j), k = slotOf(j), b = B(j), p = P[j];
+      let tx, ty, vmax = JOG;
+      if (dead) { // gol sonrası / top dışarıda: kendi yarı sahasına yürü
+        const kick = dead.kind === 'goal';
+        tx = b.x * PW; ty = (kick ? 0.5 + (b.y - 0.5) * 0.45 : b.y + (by - 0.5) * 0.25) * PL;
+        if (kick) ty = s === 'h' ? Math.max(ty, PL * 0.52) : Math.min(ty, PL * 0.48);
+        vmax = kick ? WALK + 1 : JOG;
+      } else {
+        tx = (b.x + (bx - 0.5) * (k === 0 ? 0.22 : 0.38)) * PW;
+        ty = (b.y + (by - 0.5) * (k === 0 ? 0.04 : 0.32) + (ps === s && k ? dirY(s) * 0.06 : 0)) * PL;
+        ty = Math.min(PL - 9, Math.max(9, ty)); // kimse kale ağzına yerleşmez
+      }
+      if (k === 0) { // kaleci: çizgisinde, topa göre kayar
+        const gl = s === 'h' ? PL : 0;
+        tx = Math.min(PW / 2 + 5, Math.max(PW / 2 - 5, PW / 2 + (ball.x - PW / 2) * 0.18));
+        ty = gl + (s === 'h' ? -1 : 1) * (2.5 + Math.abs(ball.y - gl) * 0.04);
+        if (flight && flight.kind === 'shot' && flight.to === j) { tx = flight.x1; ty = flight.y1; vmax = RUN; }
+      }
+      if (!dead) {
+        if (j === holder) { // top sürme: hücum yönüne ağır ağır
+          tx = p.x + (PW / 2 - p.x) * 0.05; ty = p.y + dirY(s) * 3; vmax = JOG * 0.8;
+          if (attack && s === nev.s && k > 0) { const sp = shotSpot(nev); tx = sp.x; ty = sp.y; vmax = JOG; }
+        } else if (flight && flight.kind === 'pass' && flight.to === j) { tx = flight.x1; ty = flight.y1; vmax = RUN; }
+        else if (j === presser) { const d = dist(p, ball); if (d > 2) { tx = ball.x; ty = ball.y; vmax = RUN * 0.85; } }
+        else if (attack && j === nev.shooter) { const sp = shotSpot(nev); tx = sp.x; ty = sp.y; vmax = RUN * 0.8; }
+      }
+      if (restart && j === restart.holder) { // santrayı / kale vuruşunu kullanacak oyuncu oraya yürür
+        tx = restart.x; ty = restart.y + (restart.kick ? 0 : 0.8); vmax = JOG;
+      }
+      // hız ve ivme sınırı
+      const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
+      const want = Math.min(vmax, d * 1.6);
+      const dvx = d > 0.05 ? (dx / d) * want : 0, dvy = d > 0.05 ? (dy / d) * want : 0;
+      const a = Math.min(1, SIM_DT * VIEW * 3.2);
+      p.vx += (dvx - p.vx) * a; p.vy += (dvy - p.vy) * a;
+      p.x = Math.min(PW + 3, Math.max(-3, p.x + p.vx * SIM_DT * VIEW));
+      p.y = Math.min(PL + 3, Math.max(-3, p.y + p.vy * SIM_DT * VIEW));
+    }
+    // ---- top konumu
+    if (flight) {
+      const u = Math.min(1, (t - flight.t0) / (flight.t1 - flight.t0));
+      const e = flight.kind === 'shot' ? u : 1 - (1 - u) * (1 - u) * 0.6 - 0.4 * (1 - u); // pas hafif yavaşlar
+      ball.x = flight.x0 + (flight.x1 - flight.x0) * e; ball.y = flight.y0 + (flight.y1 - flight.y0) * e;
+      ball.z = Math.sin(Math.PI * u) * flight.arc;
+    } else if (holder !== null) {
+      const p = P[holder], sp = Math.hypot(p.vx, p.vy);
+      const ux = sp > 0.3 ? p.vx / sp : 0, uy = sp > 0.3 ? p.vy / sp : dirY(sideOf(holder));
+      ball.x = p.x + ux * 0.7; ball.y = p.y + uy * 0.7; ball.z = 0;
+    }
+    // ---- kayıt
+    const o = n * FRAME;
+    for (let j = 0; j < 22; j++) { frames[o + j * 2] = P[j].x / PW; frames[o + j * 2 + 1] = P[j].y / PL; }
+    frames[o + 44] = ball.x / PW; frames[o + 45] = ball.y / PL; frames[o + 46] = ball.z; frames[o + 47] = holder === null ? -1 : holder;
+  }
+  function shotSpot(e) {
+    if (!e.spot) e.spot = { x: PW / 2 + (R() - 0.5) * 22, y: goalLine(e.s) * PL - dirY(e.s) * (11 + R() * 8) };
+    return e.spot;
+  }
+  return { frames, N, evs: shots, T_END };
+}
+// t anındaki kare (iki kare arası yumuşak geçiş)
+function frameAt(sim, t, out) {
+  const f = Math.max(0, Math.min(sim.N - 2, t / SIM_DT));
+  const i = Math.floor(f), a = f - i, o0 = i * FRAME, o1 = o0 + FRAME, F = sim.frames;
+  for (let j = 0; j < 22; j++) {
+    const s = j < 11 ? 'h' : 'a', k = j % 11;
+    out.ply[s][k].x = F[o0 + j * 2] + (F[o1 + j * 2] - F[o0 + j * 2]) * a;
+    out.ply[s][k].y = F[o0 + j * 2 + 1] + (F[o1 + j * 2 + 1] - F[o0 + j * 2 + 1]) * a;
+  }
+  out.ball.x = F[o0 + 44] + (F[o1 + 44] - F[o0 + 44]) * a;
+  out.ball.y = F[o0 + 45] + (F[o1 + 45] - F[o0 + 45]) * a;
+  out.ball.z = F[o0 + 46] + (F[o1 + 46] - F[o0 + 46]) * a;
+  const h = F[o0 + 47];
+  out.carrier = h < 0 ? null : { s: h < 11 ? 'h' : 'a', i: h % 11 };
+  return out;
 }
 
 // ---------------- 3D (sevimli, 2D ile aynı durumdan çizilir) ----------------
@@ -216,7 +377,7 @@ class Pitch3D {
     sg.fillStyle = gr; sg.fillRect(0, 0, 4, 256);
     const skyTex = new THREE.CanvasTexture(sky); skyTex.colorSpace = THREE.SRGBColorSpace;
     scene.background = skyTex;
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.5, 500);
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.3, 500);
     scene.add(new THREE.HemisphereLight('#ffffff', '#7fb87a', 1.6));
     const sun = new THREE.DirectionalLight('#fff6e0', 1.4); sun.position.set(-40, 80, 30); scene.add(sun);
     // zemin + saha
@@ -260,9 +421,9 @@ class Pitch3D {
     bx.fillStyle = '#fff'; bx.fillRect(0, 0, 128, 64); bx.fillStyle = '#1b1f27';
     for (const [x, y] of [[16, 16], [48, 40], [80, 16], [112, 40], [32, 56], [96, 56]]) { bx.beginPath(); bx.arc(x, y, 7, 0, Math.PI * 2); bx.fill(); }
     const btex = new THREE.CanvasTexture(bc); btex.colorSpace = THREE.SRGBColorSpace;
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 16), new THREE.MeshLambertMaterial({ map: btex }));
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.26, 20, 16), new THREE.MeshLambertMaterial({ map: btex }));
     scene.add(this.ball);
-    this.ballShadow = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), this.shadowMat); this.ballShadow.rotation.x = -Math.PI / 2; scene.add(this.ballShadow);
+    this.ballShadow = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), this.shadowMat); this.ballShadow.rotation.x = -Math.PI / 2; scene.add(this.ballShadow);
     this.camT = new THREE.Vector3(0, 0, 0);
     this.t = 0;
     this.resize();
@@ -297,9 +458,9 @@ class Pitch3D {
       shoe.scale.set(1, 0.6, 1.4); shoe.position.set(xs, 0.1, 0.08); g.add(shoe);
     }
     const sp = new THREE.Sprite(this.badge(kit, st.num(st.ids[s][i])));
-    sp.scale.set(1.6, 1.6, 1); sp.position.y = 4; sp.renderOrder = 10; g.add(sp);
+    sp.scale.set(2.4, 2.4, 1); sp.position.y = 4.6; sp.renderOrder = 10; g.add(sp);
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), this.shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; g.add(sh);
-    g.scale.setScalar(1.15);
+    g.scale.setScalar(0.6);   // ~1.85 m: kale (2.44 m) ile gerçek oran
     g.userData = { sp, id: st.ids[s][i], kit, phase: Math.random() * 6 };
     this.scene.add(g);
     return g;
@@ -321,20 +482,21 @@ class Pitch3D {
       const dx = nx - g.position.x, dz = nz - g.position.z;
       const moving = Math.hypot(dx, dz) > 0.02;
       if (moving) g.rotation.y = Math.atan2(dx, dz);
-      g.position.set(nx, moving ? Math.abs(Math.sin(this.t * 12 + g.userData.phase)) * 0.25 : 0, nz);
+      g.position.set(nx, moving ? Math.abs(Math.sin(this.t * 12 + g.userData.phase)) * 0.12 : 0, nz);
       const isC = st.carrier && st.carrier.s === s && st.carrier.i === i;
-      g.userData.sp.scale.setScalar(isC ? 2.1 : 1.6);
+      g.userData.sp.scale.setScalar(isC ? 3 : 2.4);
     });
     const b = st.ball;
-    this.ball.position.set(W(b.x), 0.5 + b.z * 0.4, Z(b.y));
+    this.ball.position.set(W(b.x), 0.26 + b.z, Z(b.y));
     this.ball.rotation.x += dt * 8;
     this.ballShadow.position.set(W(b.x), 0.03, Z(b.y));
     // yayın kamerası: 2D ile aynı anı, tribün açısından takip eder
-    const k = Math.min(1, dt * 2.4);
-    this.camT.x = lerp(this.camT.x, W(b.x) * 0.5, k);
-    this.camT.z = lerp(this.camT.z, Z(b.y) * 0.9, k);
+    let k = Math.min(1, dt * 2.4);
+    if (Math.abs(Z(b.y) - this.camT.z) > 25) k = 1; // sahne geçişinde kamera kesme yapar
+    this.camT.x = lerp(this.camT.x, W(b.x) * 0.6, k);
+    this.camT.z = lerp(this.camT.z, Z(b.y), k);
     const portrait = this.camera.aspect < 1;
-    this.camera.position.set(this.camT.x - (portrait ? 44 : 46), portrait ? 40 : 28, this.camT.z * (portrait ? 0.85 : 0.75));
+    this.camera.position.set(this.camT.x - (portrait ? 33 : 38), portrait ? 27 : 20, this.camT.z * (portrait ? 0.92 : 0.88));
     this.camera.lookAt(this.camT.x, 0, this.camT.z);
     this.renderer.render(this.scene, this.camera);
   }
@@ -393,7 +555,8 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   let live = startedAgo >= 0 && startedAgo < liveMs;
   const R = rng(fid * 2654435761);
   const SHOTS = ['goal', 'save', 'miss'];
-  const { segs, base, evs } = buildScript({ ...fx, events: events.filter((e) => SHOTS.includes(e.ev)) }, R);
+  const sim = simulateMatch(fx, events, R);
+  const evs = sim.evs;
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.m + 0.2 }));
   const timeline = [...evs, ...others].sort((a, b) => a.t - b.t);
 
@@ -441,7 +604,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   let clock = 0, tm = 0, speed = 1, playing = true, last = performance.now(), shown = 0, flashT = 0, pauseT = 0;
   let ci = 0, phase = 'gap', clip = null, replay = null, htShown = false, ended = false;
   const liveT = () => Math.min(95, ((Date.now() - new Date(fx.kickoff_at)) / liveMs) * 95);
-  const ply = { h: base.h.map((p) => ({ ...p })), a: base.a.map((p) => ({ ...p })) };
+  const frame = { ply: { h: Array.from({ length: 11 }, () => ({ x: 0, y: 0 })), a: Array.from({ length: 11 }, () => ({ x: 0, y: 0 })) }, ball: { x: 0.5, y: 0.5, z: 0 }, carrier: null };
   const feed = document.getElementById('mFeed');
   let sh = 0, sa = 0;
   const ls = { shots: [0, 0], on: [0, 0] };
@@ -458,30 +621,6 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     while (cur.h.length < 11) cur.h.push(null); while (cur.a.length < 11) cur.a.push(null);
     return { ids: cur, gone };
   }
-  function ballAt(t) {
-    let s = segs[0];
-    for (let i = 0; i < segs.length; i++) { s = segs[i]; if (segs[i].t1 >= t) break; }
-    const k = s.t1 > s.t0 ? clamp((t - s.t0) / (s.t1 - s.t0), 0, 1) : 1;
-    const e = s.kind === 'shot' ? k * (2 - k) : k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    const lift = s.kind === 'shot' || s.kind === 'pass' ? Math.sin(Math.PI * k) * (s.kind === 'shot' ? 7 : 3) : 0;
-    return { x: lerp(s.x0, s.x1, e), y: lerp(s.y0, s.y1, e), z: lift, seg: s, k };
-  }
-  function movePlayers(b, dt, snap) {
-    for (const s of ['h', 'a']) {
-      const attacking = b.seg.side === s;
-      const dir = s === 'h' ? -1 : 1;
-      ply[s].forEach((p, i) => {
-        const bs = base[s][i];
-        let tx = bs.x + (b.x - 0.5) * (i === 0 ? 0.25 : 0.35);
-        let ty = bs.y + (b.y - 0.5) * (i === 0 ? 0.05 : 0.3) + (attacking && i ? dir * 0.07 : 0);
-        if (b.seg.side === s && b.seg.who === i && b.seg.kind !== 'reset') { tx = b.seg.x1; ty = b.seg.y1 + dir * -0.015; }
-        if (i === 0) { ty = clamp(ty, s === 'h' ? 0.9 : 0.02, s === 'h' ? 0.98 : 0.1); tx = clamp(tx, 0.4, 0.6); }
-        const sp = snap ? 1 : Math.min(1, dt * 2.6);
-        p.x = lerp(p.x, clamp(tx, 0.03, 0.97), sp); p.y = lerp(p.y, clamp(ty, 0.01, 0.99), sp);
-      });
-    }
-  }
-
   function emit(e, silent) {
     let txt = '', cls = '';
     const team = e.s === 'h' ? H : A;
@@ -533,7 +672,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   function pump() {
     while (shown < timeline.length) {
       const e = timeline[shown];
-      const due = clipEv.has(e) ? (tm >= e.t && phase === 'clip') || clock > e.t + 1.2 : clock >= e.t;
+      const due = clipEv.has(e) ? (tm >= (e.ta ?? e.t) && phase === 'clip') || clock > e.t + 1.2 : clock >= e.t;
       if (!due) break;
       emit(e, !(clipEv.has(e) || e.ev === 'red'));
       shown++;
@@ -573,7 +712,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
         tm += dt * CLIP_RATE * sp;
         if (!live) clock = Math.max(clock, Math.min(tm, 90));
         if (tm >= clip.to) {
-          if (clip.goal && !live) { replay = { to: clip.e.t + 0.15 }; tm = clip.e.t - 0.6; overlay('<span class="tag rep">TEKRAR</span>'); }
+          if (clip.goal && !live) { replay = { to: (clip.e.ta ?? clip.e.t) + 0.25 }; tm = clip.e.t - 0.6; overlay('<span class="tag rep">TEKRAR</span>'); }
           else endClip();
         }
       }
@@ -587,16 +726,15 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       phaseLabel(nxt && !live && clock < nxt.from - 1 ? '⏩' : '');
       if (nxt && clock >= nxt.from) { ci = i + 1; startClip(nxt); }
       else if (!nxt && clock >= (live ? 95 : 94.9)) finish();
+      if (!nxt) tm = Math.min(tm, sim.T_END - 0.1);
     }
     pump();
   }
   function endClip() { phase = 'gap'; tm = clip.to; clip = null; }
   function render(dt) {
-    const b = ballAt(tm);
-    movePlayers(b, dt, false);
+    frameAt(sim, tm, frame);
     const lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock));
-    const carrier = b.seg.kind !== 'reset' && b.seg.kind !== 'still' && b.k > 0.55 ? { s: b.seg.side, i: b.seg.who } : null;
-    const st = { ply, ids: lu.ids, gone: lu.gone, kits, ball: b, carrier, num, name: (id) => names.get(id) || '' };
+    const st = { ply: frame.ply, ids: lu.ids, gone: lu.gone, kits, ball: frame.ball, carrier: frame.carrier, num, name: (id) => names.get(id) || '' };
     if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
   }
   function endLive() {
@@ -665,7 +803,6 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     tm = clock;
     nextClipIndex();
   }
-  movePlayers(ballAt(tm), 0, true);
   raf = requestAnimationFrame(step);
   try { if (localStorage.getItem('mac-mod') === '3d') document.querySelector('#mMode button[data-m="3d"]').click(); } catch { /* yok */ }
 
