@@ -1,5 +1,6 @@
 // Küçük arayüz yardımcıları (framework yok)
 import { GROUP_SHORT } from './config.js';
+import { crestSVG } from './kit.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -33,9 +34,9 @@ export function ovrClass(o) {
 export const ovrBadge = (o) => `<span class="ovr ${ovrClass(o)}">${o}</span>`;
 export const grpBadge = (g) => `<span class="grp g-${esc(g)}">${GROUP_SHORT[g] || esc(g)}</span>`;
 
-export function teamDot(t) {
+export function teamDot(t, size = 18) {
   if (!t) return '';
-  return `<span class="tdot" style="background:${esc(t.color1)};border-color:${esc(t.color2)}"></span>`;
+  return `<span class="tcrest">${crestSVG(t, size)}</span>`;
 }
 
 let toastTimer;
