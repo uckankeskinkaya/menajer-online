@@ -170,7 +170,7 @@ function simulateMatch(fx, events, R) {
   for (const e of shots) {
     e.t = Math.max(e.m - 0.4 + R() * 0.3, last + (lastGoal ? 2.9 : 2.0)); last = e.t; lastGoal = e.ev === 'goal';
     e.shooter = (e.s === 'h' ? 0 : 11) + (e.slot ?? (8 + Math.floor(R() * 3)));
-    const u = R(); e.style = u < 0.33 ? 'cross' : u < 0.5 ? 'long' : 'thru'; // kanattan orta / uzaktan şut / ara pas
+    const u = R(); e.style = u < 0.12 ? 'corner' : u < 0.38 ? 'cross' : u < 0.55 ? 'long' : 'thru'; // korner / kanattan orta / uzaktan şut / ara pas
   }
   const fouls = events.filter((e) => e.ev === 'yellow' || e.ev === 'red').sort((a, b) => a.m - b.m);
   for (const f of fouls) f.tf = f.m + 0.2;
@@ -245,10 +245,15 @@ function simulateMatch(fx, events, R) {
     if (restart && t >= restart.t && Math.hypot(P[restart.holder].x - restart.x, P[restart.holder].y - restart.y) > 1.6 && t < restart.t + 2) restart.t = t + SIM_DT; // kullanacak oyuncu yerine varsın
     if (restart && t >= restart.t) { // santra, kale vuruşu, korner, serbest vuruş
       ball.x = restart.x; ball.y = restart.y; ball.z = 0; flight = null; holder = restart.holder;
-      nextAct = t + 0.25; if (restart.corner) { corner = { side: sideOf(restart.holder) }; nextAct = t + 0.3; }
+      nextAct = t + 0.25; if (restart.corner) { corner = { side: sideOf(restart.holder), ev: restart.cev }; nextAct = t + 0.3; }
       restart = null; dead = null; loose = null;
     }
     // korner ortası: ceza sahasındaki savunmacı kafayla uzaklaştırır
+    if (corner && corner.ev && holder !== null && t >= nextAct) { // gol/şut olayı: orta golcünün kafasına
+      const sp = shotSpot(corner.ev), d = Math.hypot(sp.x - ball.x, sp.y - ball.y);
+      startFlight(corner.ev.shooter, sp.x, sp.y, 'pass', corner.side, d / (PASS_V * 0.8 * VIEW) + 0.05, 4.5);
+      corner = null;
+    }
     if (corner && holder !== null && t >= nextAct) {
       const dfn = corner.side === 'h' ? 'a' : 'h', gl = goalLine(corner.side) * PL;
       const spot = { x: PW / 2 + (R() - 0.5) * 14, y: gl - dirY(corner.side) * (6 + R() * 6) };
@@ -285,8 +290,8 @@ function simulateMatch(fx, events, R) {
       else if (ev.ev === 'save') { x1 = clamp(P[gk].x + (R() - 0.5) * 3, PW / 2 - 3.6, PW / 2 + 3.6); y1 = P[gk].y; } // kalecinin uzanabileceği yere
       else { x1 = PW / 2 + (R() < 0.5 ? -1 : 1) * (4.5 + R() * 5); y1 = gl + dirY(s) * 2.5; }
       const d = Math.hypot(x1 - ball.x, y1 - ball.y);
-      const hv = ev.style === 'cross' ? 0.6 : 1;
-      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * hv * VIEW) + 0.02, ev.style === 'cross' ? 0.5 : R() < 0.4 ? 1.6 : 0.4);
+      const head = ev.style === 'cross' || ev.style === 'corner', hv = head ? 0.6 : 1;
+      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * hv * VIEW) + 0.02, head ? 0.5 : R() < 0.4 ? 1.6 : 0.4);
       flight.ev = ev.ev; flight.side = s; flight.ref = ev;
       ev.done = true; ei++;
     }
@@ -306,10 +311,21 @@ function simulateMatch(fx, events, R) {
         const s = f.side, gl = goalLine(s) * PL, cx = f.x1 < PW / 2 ? 0.6 : PW - 0.6;
         let tk = J(s, 2), bd = 1e9; // korneri kanattaki oyuncu kullanır
         for (let k = 2; k < 11; k++) { const d = Math.abs(P[J(s, k)].x - cx) + Math.abs(G(s, P[J(s, k)].y) - PL) * 0.3; if (d < bd) { bd = d; tk = J(s, k); } }
-        dead = { kind: 'corner', side: s };
-        restart = { t: t + 1.1, x: cx, y: gl - dirY(s) * 0.6, holder: tk, kick: true, corner: true };
+        const ce = f.cev && !f.cev.done ? f.cev : undefined;
+        if (ce && tk === ce.shooter) tk = J(s, tk % 11 === 2 ? 3 : 2);
+        dead = { kind: 'corner', side: s, ev: ce };
+        restart = { t: t + 1.1, x: cx, y: gl - dirY(s) * 0.6, holder: tk, kick: true, corner: true, cev: ce };
       } else if (dist(P[f.to], ball) < 1.4) { holder = f.to; nextAct = t + 0.12 + R() * 0.22; }
       else { const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0) || 1; loose = { to: f.to, vx: ((f.x1 - f.x0) / L) * 3, vy: ((f.y1 - f.y0) / L) * 3, t0: t }; }
+    }
+    { const ce = shots[ei];
+      if (ce && ce.style === 'corner' && !ce.cornered && t >= ce.t - 2.3 && t < ce.t - 0.6 && G(ce.s, ball.y) > PL * 0.6 && !dead && !restart && !corner && !(flight && flight.kind !== 'pass')) {
+        ce.cornered = true; // savunmacı topu kendi çizgisinden dışarı çıkarır
+        const sx = ball.x < PW / 2 ? -1 : 1, gl = goalLine(ce.s) * PL;
+        const x1 = PW / 2 + sx * (12 + R() * 14), y1 = gl + dirY(ce.s) * 1.5, d = Math.hypot(x1 - ball.x, y1 - ball.y);
+        startFlight(-1, x1, y1, 'deflect', ce.s, d / (PASS_V * VIEW) + 0.05, d > 20 ? 3 : 0.8);
+        flight.cev = ce;
+      }
     }
     // hücum hazırlığı: sıradaki olayın takımı topu alır, kaleye ilerler, son anda topu şutçuya verir
     const nev = shots[ei];
@@ -365,7 +381,8 @@ function simulateMatch(fx, events, R) {
       let tx, ty, vmax = JOG;
       if (dead && dead.kind === 'corner') { // korner: ceza sahasında kalabalık
         const att = s === dead.side, gl = goalLine(dead.side) * PL, hs = (j * 37) % 11;
-        if (att && ro.r < 0.2) { tx = clamp(PW / 2 + (ro.fx - 0.5) * 40, 6, PW - 6); ty = Yg(s, PL * 0.52); }
+        if (dead.ev && j === dead.ev.shooter) { const sp = shotSpot(dead.ev); tx = sp.x + 2; ty = sp.y - dirY(s) * 3; } // golcü arka direğe yakın bekler
+        else if (att && ro.r < 0.2) { tx = clamp(PW / 2 + (ro.fx - 0.5) * 40, 6, PW - 6); ty = Yg(s, PL * 0.52); }
         else if (!att && k > 0 && ro.r > 0.95 && k === roles[s].reduce((m, q, i) => (q.r >= roles[s][m].r ? i : m), 1)) { tx = PW / 2; ty = Yg(s, 38); }
         else { tx = PW / 2 + (hs - 5) * 2.1 + (att ? 0.8 : -0.6); ty = gl - dirY(dead.side) * ((att ? 7 : 5) + ((j * 13) % 7) * 1.3); }
         vmax = JOG;
@@ -445,7 +462,7 @@ function simulateMatch(fx, events, R) {
   }
   function shotSpot(e) {
     if (!e.spot) {
-      const [wx, d0, dd] = e.style === 'cross' ? [10, 6, 5] : e.style === 'long' ? [26, 21, 7] : [22, 11, 8];
+      const [wx, d0, dd] = e.style === 'corner' ? [12, 5, 6] : e.style === 'cross' ? [10, 6, 5] : e.style === 'long' ? [26, 21, 7] : [22, 11, 8];
       e.spot = { x: PW / 2 + (R() - 0.5) * wx, y: goalLine(e.s) * PL - dirY(e.s) * (d0 + R() * dd) };
     }
     return e.spot;
