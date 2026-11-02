@@ -54,6 +54,8 @@ Aynı istekte hem değişiklik hem `raise exception`'lı test gönderme: excepti
 İstemci ekranları (mobil öncelikli): giriş/kayıt, oda kur/katıl, lobi + ayarlar, kadro, taktik (diziliş + ilk 11),
 transfer pazarı (lig/mevki/rating/fiyat filtresi), teklifler (gelen/giden, canlı), fikstür/puan durumu/kupa ağacı, haberler, 2D maç izleme.
 
+Yol haritası: `docs/PLAN.md` (fazlar ve maddeler; her oturum sonunda güncelle).
+
 ## Veri modeli (özet)
 
 `real_players` · `profiles` · `games` (code, owner, status lobby/active/finished, settings, current_round, cup) ·
