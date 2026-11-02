@@ -61,6 +61,8 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 021_moral_etkisi | ✅ `execute_sql`: `_power` moral ±%4.5, `_sim_fixture` maç sonu moral |
 | 022_yeni_sezon | ✅ kullanıcı SQL Editor'den (girinti farkı dışında aynı; canlıda sezon sonu + yeni sezon test edildi): `new_season` sözleşme bitişi (bedelsiz ayrılık) + altyapıdan 2 genç + moral sıfırlama |
 | 023_moral_ayar | ✅ `execute_sql`: moral etkisi ±%1.8 (021'deki ±%4.5 kartopu etkisiyle gol ortalamasını 4.2'ye çıkarmıştı), maç sonu ±4, her maç 70'e %10 dönüş → canlıda 380 maçta 2.66 gol |
+| 024_devre_arasi | ⏳ kullanıcı SQL Editor'den: `play_second_half(p_game, p_talk, p_mentality, p_lineup)` (takım konuşması ±%3, aynı mevkiye en fazla kalan hak kadar değişiklik, YZ gerideyse hücum) |
+| 025_iki_yari | ⏳ 024'ten SONRA `execute_sql`: `_sim_fixture` 45'te durabilir (`stats.stop`), durum `stats.ht`; `_play_round` kariyerde menajerin maçını durdurur ve haftayı bekletir; `_play_fixture` ödülleri maç bitince; `_auto_tick` devre arasındakini atlar |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |

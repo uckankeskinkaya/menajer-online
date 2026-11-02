@@ -103,7 +103,7 @@ async function route() {
     if (!S.game) return go('');
     if (p[2] === 'mac' && p[3]) {
       renderGame();
-      return openMatch(sb, Number(p[3]), { teamById: S.teamById, liveMs: LIVE_MS, onClose: () => go(`oda/${S.gameId}/${S.tab}`) });
+      return openMatch(sb, Number(p[3]), { teamById: S.teamById, liveMs: LIVE_MS, myTeam: me()?.id, onClose: () => go(`oda/${S.gameId}/${S.tab}`) });
     }
     if (p[2]) S.tab = p[2];
     return renderGame();
@@ -392,7 +392,7 @@ async function reload() {
       sb.from('teams').select('*').eq('game_id', id).order('created_at'),
       sb.from('squads').select('*').eq('game_id', id),
       sb.from('offers').select('*').eq('game_id', id).order('created_at', { ascending: false }).limit(300),
-      sb.from('fixtures').select('id,comp,round,cup_round,leg,tie,home,away,hg,ag,pens,played,winner,kickoff_at').eq('game_id', id).order('round').order('kickoff_at', { nullsFirst: false }).order('id'),
+      sb.from('fixtures').select('id,comp,round,cup_round,leg,tie,home,away,hg,ag,pens,played,winner,kickoff_at,ht:stats->ht->>vh').eq('game_id', id).order('round').order('kickoff_at', { nullsFirst: false }).order('id'),
       sb.from('news').select('*').eq('game_id', id).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(80),
     ]);
     for (const r of [g, t, q, o, f, n]) if (r.error) throw r.error;
@@ -809,6 +809,7 @@ function renderOzet() {
   view().innerHTML = `
   ${S.game.status === 'finished' ? `<section class="card champ">🏆 ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''}
     ${isOwner() ? `<button class="btn primary big" id="btnSeason" style="margin-top:10px">▶ ${(S.game.season || 1) + 1}. sezonu başlat</button><p class="small">Oyuncular bir yaş büyür; gençler gelişir, yaşlılar düşer, bazıları emekli olur. Kadrolar ve bütçeler kalır.</p>` : '<p class="small">Yeni sezonu oda sahibi başlatır.</p>'}</section>` : ''}
+  ${(() => { const p = mine.find((f) => !f.played && f.ht != null); return p ? `<section class="card press"><h2>⏸ Devre arası</h2><p>${esc(tname(p.home))} <b>${p.hg ?? 0} - ${p.ag ?? 0}</b> ${esc(tname(p.away))}</p><p class="small muted">İkinci yarı senin kararını bekliyor: takım konuşması, değişiklik, taktik.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Soyunma odasına git</button></section>` : ''; })()}
   ${pressCard(t, mine)}
   ${live.length ? `<section class="card live-card"><h2>🔴 Şu an canlı</h2>${live.map((f) => fxRow(f)).join('')}</section>` : ''}
   <section class="card hero">
@@ -878,12 +879,14 @@ function renderOzet() {
     try {
       const r = await rpc('play_next_round', { p_game: S.gameId });
       await reload();
+      if (r.halftime) { toast('Devre arası: kararını ver', 'ok'); go(`oda/${S.gameId}/mac/${r.halftime}`); return; }
       const myf = S.fixtures.find((f) => f.round === r.round && (f.home === me()?.id || f.away === me()?.id));
       toast(`${r.round}. hafta oynandı (${r.played} maç)`, 'ok');
       if (myf) go(`oda/${S.gameId}/mac/${myf.id}`); else renderGame();
     } catch (err) { toast(errText(err), 'err'); renderGame(); }
   });
   $('#btnKit') && ($('#btnKit').onclick = kitEditor);
+  $('#btnHT') && ($('#btnHT').onclick = (e) => go(`oda/${S.gameId}/mac/${e.target.dataset.f}`));
   $$('[data-press]').forEach((b) => (b.onclick = async () => {
     $$('[data-press]').forEach((x) => (x.disabled = true));
     const r = await act('answer_press', { p_game: S.gameId, p_choice: Number(b.dataset.press) }, { quiet: true });
