@@ -39,10 +39,16 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | Adım | Durum |
 |---|---|
 | 001_tablolar, 002_fc26_ozellikler | ✅ uygulandı, oyuncular yüklü |
-| 003_oyun_mantigi, 004_transfer_mac | ❌ henüz uygulanmadı (onay penceresi zaman aşımı); sonra test edilecek |
+| 003_oyun_mantigi | ✅ uygulandı (kullanıcı SQL Editor'den) ve test edildi |
+| 004_transfer_mac | ✅ uygulandı (maç motoru `execute_sql`, transfer+yetkiler kullanıcı SQL Editor'den `supabase/elle/004_kalan.sql`), test edildi |
+| 005_mac_ayari | ✅ uygulandı: gol sabiti 0.25, şut sabiti 0.21 → 560 maçta 2.49 gol/maç |
 | Web istemcisi (`web/`) | ❌ başlanmadı |
 | GitHub Pages | ❌ |
-| `get_advisors` güvenlik kontrolü | ❌ en son |
+| `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
+
+003-005 Supabase'in migration geçmişinde (`list_migrations`) görünmez; elle/`execute_sql` ile uygulandılar. Kaynak doğru olan bu dosyalardır.
+`execute_sql`'de `delete`, `revoke`, `create extension` gibi ifadeler onay ister (60 sn); `create or replace function` ve DO bloklarındaki testler onaysız geçer.
+Aynı istekte hem değişiklik hem `raise exception`'lı test gönderme: exception değişikliği de geri alır.
 
 İstemci ekranları (mobil öncelikli): giriş/kayıt, oda kur/katıl, lobi + ayarlar, kadro, taktik (diziliş + ilk 11),
 transfer pazarı (lig/mevki/rating/fiyat filtresi), teklifler (gelen/giden, canlı), fikstür/puan durumu/kupa ağacı, haberler, 2D maç izleme.
