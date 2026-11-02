@@ -180,9 +180,10 @@ function simulateMatch(fx, events, R) {
   for (const e of shots) {
     e.t = Math.max(e.m - 0.4 + R() * 0.3, last + (lastGoal ? 2.9 : 2.0)); last = e.t; lastGoal = e.ev === 'goal';
     e.shooter = (e.s === 'h' ? 0 : 11) + (e.slot ?? (8 + Math.floor(R() * 3)));
-    const u = R(); e.style = u < 0.12 ? 'corner' : u < 0.38 ? 'cross' : u < 0.55 ? 'long' : 'thru'; // korner / kanattan orta / uzaktan şut / ara pas
+    const u = R(); e.style = e.pen ? 'pen' : e.fk ? 'fk' : u < 0.12 ? 'corner' : u < 0.38 ? 'cross' : u < 0.55 ? 'long' : 'thru'; // korner / kanattan orta / uzaktan şut / ara pas
   }
-  const fouls = events.filter((e) => e.ev === 'yellow' || e.ev === 'red').sort((a, b) => a.m - b.m);
+  const penF = new Set(events.filter((e) => e.pen && e.f).map((e) => `${e.m}:${e.f}`));
+  const fouls = events.filter((e) => (e.ev === 'yellow' || e.ev === 'red') && !penF.has(`${e.m}:${e.p}`)).sort((a, b) => a.m - b.m);
   for (const f of fouls) f.tf = f.m + 0.2;
   let fi = 0, corner = null;
   const T_END = Math.max(95, last + 14);
@@ -288,7 +289,7 @@ function simulateMatch(fx, events, R) {
         }
       }
     }
-    if (ev && !ev.done && t >= ev.t && !dead && ((holder === ev.shooter && G(ev.s, ball.y) > PL - (ev.style === 'long' ? 31 : 25)) || (t >= ev.t + 1.6 && holder !== null && sideOf(holder) === ev.s && G(ev.s, P[holder].y) > PL * 0.62) || t >= ev.t + 4)) {
+    if (ev && !ev.done && t >= ev.t && !dead && (!(ev.style === 'pen' || ev.style === 'fk') || ev.setT !== undefined || t >= ev.t + 4) && ((holder === ev.shooter && G(ev.s, ball.y) > PL - (ev.style === 'long' || ev.style === 'fk' ? 31 : 25)) || (t >= ev.t + 1.6 && holder !== null && sideOf(holder) === ev.s && G(ev.s, P[holder].y) > PL * 0.62) || t >= ev.t + 4)) {
       // gecikme olduysa sonraki olayları kaydır (gol sonrası santraya yer kalsın)
       ev.t = t;
       let lt = t, lg = ev.ev === 'goal';
@@ -300,8 +301,8 @@ function simulateMatch(fx, events, R) {
       else if (ev.ev === 'save') { x1 = clamp(P[gk].x + (R() - 0.5) * 3, PW / 2 - 3.6, PW / 2 + 3.6); y1 = P[gk].y; } // kalecinin uzanabileceği yere
       else { x1 = PW / 2 + (R() < 0.5 ? -1 : 1) * (4.5 + R() * 5); y1 = gl + dirY(s) * 2.5; }
       const d = Math.hypot(x1 - ball.x, y1 - ball.y);
-      const head = ev.style === 'cross' || ev.style === 'corner', hv = head ? 0.6 : 1;
-      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * hv * VIEW) + 0.02, head ? 0.5 : R() < 0.4 ? 1.6 : 0.4);
+      const head = ev.style === 'cross' || ev.style === 'corner', hv = head ? 0.6 : ev.style === 'fk' ? 0.8 : 1;
+      startFlight(ev.ev === 'save' ? gk : -1, x1, y1, 'shot', s, d / (SHOT_V * hv * VIEW) + 0.02, head ? 0.5 : ev.style === 'fk' ? 2.6 : ev.style === 'pen' ? 0.6 : R() < 0.4 ? 1.6 : 0.4);
       flight.ev = ev.ev; flight.side = s; flight.ref = ev;
       ev.done = true; ei++;
     }
@@ -327,6 +328,28 @@ function simulateMatch(fx, events, R) {
         restart = { t: t + 1.1, x: cx, y: gl - dirY(s) * 0.6, holder: tk, kick: true, corner: true, cev: ce };
       } else if (dist(P[f.to], ball) < 1.4) { holder = f.to; nextAct = t + 0.12 + R() * 0.22; }
       else { const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0) || 1; loose = { to: f.to, vx: ((f.x1 - f.x0) / L) * 3, vy: ((f.y1 - f.y0) / L) * 3, t0: t }; }
+    }
+    { const pe = shots[ei];
+      if (pe && (pe.style === 'pen' || pe.style === 'fk') && pe.setT === undefined && !dead && !restart && !corner && holder !== null && sideOf(holder) === pe.s && k0ok(pe)) {
+        const s = pe.s, dfn = s === 'h' ? 'a' : 'h', gl = goalLine(s) * PL;
+        pe.setT = t; // faulün anı (izlemede düdük)
+        let off = -1;
+        if (pe.f !== undefined) { const lu = dfn === 'h' ? 0 : 11; for (let k = 1; k < 11; k++) if (fSlot(pe, dfn) === k) off = lu + k; }
+        if (off < 0) off = nearest(dfn, P[holder]);
+        let x0, y0;
+        if (pe.style === 'pen') { x0 = PW / 2; y0 = gl - dirY(s) * 11; }
+        else { x0 = clamp(ball.x, 14, PW - 14); y0 = Yg(s, clamp(G(s, ball.y), PL - 30, PL - 21)); }
+        dead = { kind: pe.style, side: s, x: x0, y: y0, off, wall: [] };
+        if (pe.style === 'fk') { // baraj: kaleye bakan çizgide 9.15 m, 4 savunmacı
+          const gx = PW / 2 - x0, gy = gl - y0, L = Math.hypot(gx, gy), ux = gx / L, uy = gy / L;
+          const cand = []; for (let k = 1; k < 11; k++) cand.push(J(dfn, k));
+          cand.sort((a, b) => dist(P[a], { x: x0, y: y0 }) - dist(P[b], { x: x0, y: y0 }));
+          cand.slice(0, 4).forEach((j, i) => dead.wall.push({ j, x: x0 + ux * 9.15 + (-uy) * (i - 1.5) * 0.75, y: y0 + uy * 9.15 + ux * (i - 1.5) * 0.75 }));
+        }
+        restart = { t: t + (pe.style === 'pen' ? 1.5 : 1.2), x: x0, y: y0, holder: pe.shooter, kick: true };
+        pe.t = Math.max(pe.t, restart.t + 0.2);
+        holder = null; flight = null; loose = null;
+      }
     }
     { const ce = shots[ei];
       if (ce && ce.style === 'corner' && !ce.cornered && t >= ce.t - 2.3 && t < ce.t - 0.6 && G(ce.s, ball.y) > PL * 0.6 && !dead && !restart && !corner && !(flight && flight.kind !== 'pass')) {
@@ -396,6 +419,18 @@ function simulateMatch(fx, events, R) {
         else if (!att && k > 0 && ro.r > 0.95 && k === roles[s].reduce((m, q, i) => (q.r >= roles[s][m].r ? i : m), 1)) { tx = PW / 2; ty = Yg(s, 38); }
         else { tx = PW / 2 + (hs - 5) * 2.1 + (att ? 0.8 : -0.6); ty = gl - dirY(dead.side) * ((att ? 7 : 5) + ((j * 13) % 7) * 1.3); }
         vmax = JOG;
+      } else if (dead && (dead.kind === 'pen' || dead.kind === 'fk')) {
+        const att = s === dead.side, gl = goalLine(dead.side) * PL, hs = (j * 37) % 11;
+        const w = dead.wall.find((q) => q.j === j);
+        if (k === 0 && !att) { tx = PW / 2 + (dead.kind === 'fk' ? (dead.x < PW / 2 ? -1.2 : 1.2) : 0); ty = gl - dirY(dead.side) * 0.3; }
+        else if (k === 0) { tx = PW / 2; ty = Yg(s, 30); }
+        else if (w) { tx = w.x; ty = w.y; }
+        else if (j === dead.off) { tx = dead.x + 2; ty = dead.y - dirY(dead.side) * 3; }
+        else if (dead.kind === 'pen') { // ceza sahası çizgisinin ve yayın dışında, yan yana
+          const idx = (k - 1) * 2 + (att ? 0 : 1), dx = (idx - 9.5) * 1.9;
+          tx = PW / 2 + dx; ty = gl - dirY(dead.side) * Math.max(17.8, 11 + Math.sqrt(Math.max(0, 9.15 * 9.15 - dx * dx)) + 1.2);
+        } else { tx = PW / 2 + (hs - 5) * 2.2 + (att ? 0.7 : -0.5); ty = gl - dirY(dead.side) * ((att ? 9 : 7) + ((j * 13) % 6) * 1.2); }
+        vmax = JOG;
       } else if (dead && dead.kind === 'foul') { // faul: oyun durur, faulü yapan oyuncu yerinde
         tx = p.x; ty = p.y; vmax = WALK;
         if (j === dead.off) { tx = ball.x + 1.2; ty = ball.y + 1.2; }
@@ -419,7 +454,8 @@ function simulateMatch(fx, events, R) {
         if (flight && flight.kind === 'shot' && flight.to === j) { tx = flight.x1; ty = flight.y1; vmax = RUN; }
       }
       if (!dead) {
-        if (j === holder && attack && nev.style === 'cross' && j === nev.winger) { // çizgiye doğru sürer
+        if (j === holder && nev && (nev.style === 'pen' || nev.style === 'fk') && nev.setT !== undefined) { tx = p.x; ty = p.y; vmax = WALK; } // duran top: vuruşa hazırlanır
+        else if (j === holder && attack && nev.style === 'cross' && j === nev.winger) { // çizgiye doğru sürer
           tx = nev.wx; ty = Yg(s, PL - 12); vmax = JOG;
         } else if (j === holder) { // top sürme: hücum yönüne ağır ağır
           tx = p.x + (PW / 2 - p.x) * 0.05; ty = Yg(s, Math.min(G(s, p.y) + 3, Math.max(G(s, p.y), PL - 20))); vmax = JOG * 0.8;
@@ -470,6 +506,11 @@ function simulateMatch(fx, events, R) {
     for (let j = 0; j < 22; j++) { frames[o + j * 2] = P[j].x / PW; frames[o + j * 2 + 1] = P[j].y / PL; }
     frames[o + 44] = ball.x / PW; frames[o + 45] = ball.y / PL; frames[o + 46] = ball.z; frames[o + 47] = holder === null ? -1 : holder;
   }
+  function k0ok(e) { // kurulum zamanı: olaydan biraz önce, top rakip yarı sahadayken (ya da süre dolunca)
+    if (t < e.t - 1.7) return false;
+    return G(e.s, ball.y) > PL * (e.style === 'pen' ? 0.7 : 0.6) || t >= e.t - 0.4;
+  }
+  function fSlot(e, dfn) { return e.fslot; }
   function shotSpot(e) {
     if (!e.spot) {
       const [wx, d0, dd] = e.style === 'corner' ? [12, 5, 6] : e.style === 'cross' ? [10, 6, 5] : e.style === 'long' ? [26, 21, 7] : [22, 11, 8];
@@ -713,7 +754,8 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   const events = (fx.events || []).map((e) => {
     const lu = (e.s === 'h' ? startH : startA);
     const slot = lu.indexOf(e.p);
-    return { m: e.m, s: e.s, p: e.p, a: e.a, ev: e.t, slot: slot > 0 ? slot : undefined };
+    return { m: e.m, s: e.s, p: e.p, a: e.a, ev: e.t, slot: slot > 0 ? slot : undefined, pen: !!e.pen, fk: !!e.fk, f: e.f,
+      fslot: e.f ? ((e.s === 'h' ? startA : startH).indexOf(e.f) > 0 ? (e.s === 'h' ? startA : startH).indexOf(e.f) : undefined) : undefined };
   });
   const startedAgo = fx.kickoff_at ? Date.now() - new Date(fx.kickoff_at) : Infinity;
   let live = startedAgo >= 0 && startedAgo < liveMs;
@@ -722,6 +764,8 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   const sim = simulateMatch(fx, events, R);
   const evs = sim.evs;
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.tf ?? e.m + 0.2 }));
+  // duran top anları: düdük (penaltı / serbest vuruş)
+  for (const e of evs) if (e.setT !== undefined) others.push({ m: e.m, t: e.setT, s: e.s, ev: e.style === 'pen' ? 'penfoul' : 'fkfoul', p: e.f, a: e.p });
   const timeline = [...evs, ...others].sort((a, b) => a.t - b.t);
 
   // ---- önemli anlar: goller, kurtarışlar, kırmızı kartlar ve birkaç kaçırma normal hızda; aralar hızla geçer ----
@@ -731,7 +775,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   const pickedMiss = new Set(misses.filter(() => R() < 0.35).slice(0, 4).concat(misses.filter((e) => e.m >= 85).slice(0, 1)));
   let clips = [];
   for (const e of evs) {
-    if (e.ev === 'goal' || e.ev === 'save' || pickedMiss.has(e)) clips.push({ from: e.t - 1.35, to: e.t + (e.ev === 'goal' ? 1.3 : 0.6), e, goal: e.ev === 'goal' });
+    if (e.ev === 'goal' || e.ev === 'save' || pickedMiss.has(e)) clips.push({ from: (e.setT !== undefined ? Math.min(e.setT - 0.5, e.t - 1.35) : e.t - 1.35), to: e.t + (e.ev === 'goal' ? 1.3 : 0.6), e, goal: e.ev === 'goal' });
   }
   for (const e of others) if (e.ev === 'red') clips.push({ from: e.t - 0.7, to: e.t + 0.3, e });
   clips.sort((a, b) => a.from - b.from);
@@ -794,10 +838,13 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       if (e.s === 'h') sh++; else sa++;
       ls.shots[si]++; ls.on[si]++;
       document.getElementById('sH').textContent = sh; document.getElementById('sA').textContent = sa;
-      txt = `<b>GOL!</b> ${nm(e.p)}${e.a ? ` <small>(asist: ${nm(e.a)})</small>` : ''}`; cls = 'goal';
+      const how = e.pen ? ' <small>(penaltı)</small>' : e.fk ? ' <small>(serbest vuruş)</small>' : '';
+      txt = `<b>GOL!</b> ${nm(e.p)}${how}${e.a && !e.pen && !e.fk ? ` <small>(asist: ${nm(e.a)})</small>` : ''}`; cls = 'goal';
       if (!silent) flash(`GOL! ${names.get(e.p) || ''}`, kits[e.s]);
-    } else if (e.ev === 'save') { ls.shots[si]++; ls.on[si]++; txt = `Kurtarış! ${nm(e.p)} şutu`; cls = 'save'; }
-    else if (e.ev === 'miss') { ls.shots[si]++; txt = `${nm(e.p)} auta attı`; cls = 'miss'; }
+    } else if (e.ev === 'save') { ls.shots[si]++; ls.on[si]++; txt = e.pen ? `<b>Penaltı kurtarıldı!</b> ${nm(e.p)}` : e.fk ? `Kurtarış! ${nm(e.p)} serbest vuruşu` : `Kurtarış! ${nm(e.p)} şutu`; cls = 'save'; }
+    else if (e.ev === 'miss') { ls.shots[si]++; txt = e.pen ? `<b>${nm(e.p)} penaltıyı kaçırdı!</b>` : e.fk ? `${nm(e.p)} serbest vuruşu dışarı attı` : `${nm(e.p)} auta attı`; cls = 'miss'; }
+    else if (e.ev === 'penfoul') { txt = `<b>PENALTI!</b>${e.p ? ` ${nm(e.p)} ceza sahasında faul yaptı` : ''}`; cls = 'pen'; if (!silent) flash('PENALTI!', { c1: '#111827', c2: '#facc15' }); }
+    else if (e.ev === 'fkfoul') { txt = 'Ceza sahası önünde faul: serbest vuruş'; cls = 'fk'; }
     else if (e.ev === 'yellow') { txt = `${nm(e.p)}`; cls = 'yellow'; }
     else if (e.ev === 'red') { txt = `<b>Kırmızı kart!</b> ${nm(e.p)}`; cls = 'red'; if (!silent) flash(`KIRMIZI KART · ${names.get(e.p) || ''}`, { c1: '#dc2626', c2: '#ffffff' }); }
     else if (e.ev === 'injury') { txt = `${nm(e.p)} sakatlandı`; cls = 'injury'; }
