@@ -195,3 +195,18 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 @keyframes blink { 50% { opacity: .45; } }
 .chk { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
 .lrow .btn.sm { flex: none; }
+
+/* Faz 2: kondisyon, durum, istatistik, puanlar */
+.fit { display: inline-block; width: 34px; height: 5px; background: #2a3a30; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 4px; }
+.fit i { display: block; height: 100%; } .fit .hi { background: var(--pri); } .fit .mid { background: var(--warn); } .fit .lo { background: var(--err); }
+.slot .fit { width: 40px; margin: 1px 0 0; }
+.slot.unav .nm { background: rgba(200,0,0,.75); }
+.prow.unav { opacity: .55; }
+.tag.bad { background: #6a2a2a; } .tag.warn { background: #6a5a00; }
+.up { color: var(--pri); font-size: 11px; font-weight: 700; } .down { color: var(--err); font-size: 11px; font-weight: 700; }
+.pstat { display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; background: var(--card2); border-radius: 10px; padding: 8px 4px; margin-bottom: 10px; }
+.pstat b { display: block; font-size: 17px; } .pstat small { font-size: 10px; }
+.motm { text-align: center; font-size: 14px; padding: 6px; background: #3b3200; border-radius: 8px; }
+.lcols .star { color: #ffd54f; font-weight: 700; }
+.rt { font-size: 12px; padding: 0 4px; border-radius: 4px; background: #33483c; } .rt.hi { background: var(--pri-d); } .rt.lo { background: #6a2a2a; }
+.fe.red { background: #4a1515; }
