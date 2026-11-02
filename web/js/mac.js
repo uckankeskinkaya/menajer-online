@@ -115,6 +115,17 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     data?.forEach((p) => names.set(p.id, p.name));
   }
   const H = teamById.get(fx.home), A = teamById.get(fx.away);
+  // forma renkleri: çimle ya da rakiple karışıyorsa ikinci renge geç
+  const rgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); const n = m ? parseInt(m[1], 16) : 0xcc0000; return [n >> 16, (n >> 8) & 255, n & 255]; };
+  const dist = (a, b) => { const x = rgb(a), y = rgb(b); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
+  const GRASS = '#2f7d32';
+  const kit = (t, other) => {
+    let fill = t?.color1 || '#cc0000', line = t?.color2 || '#ffffff';
+    if (dist(fill, GRASS) < 90 || (other && dist(fill, other) < 90)) [fill, line] = [line, fill];
+    if (dist(fill, GRASS) < 90) fill = '#111111';
+    return { fill, line };
+  };
+  const KH = kit(H), KA = kit(A, KH.fill);
   const nm = (id) => esc(names.get(id) || '?');
   // olay türünü 'ev' alanına taşı; 't' zaman olarak kullanılacak. Şutçunun slotunu bul.
   const events = (fx.events || []).map((e) => {
@@ -267,8 +278,9 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
         p.x = lerp(p.x, clamp(tx, 0.03, 0.97), sp); p.y = lerp(p.y, clamp(ty, 0.01, 0.99), sp);
         const r = Math.max(6, w * 0.022);
         ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), r, 0, Math.PI * 2);
-        ctx.fillStyle = i === 0 ? (s === 'h' ? '#ffd600' : '#00e5ff') : team?.color1 || '#c00';
-        ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = team?.color2 || '#fff'; ctx.stroke();
+        const k = s === 'h' ? KH : KA;
+        ctx.fillStyle = i === 0 ? (s === 'h' ? '#ffd600' : '#00e5ff') : k.fill;
+        ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = k.line === k.fill ? '#000' : k.line; ctx.stroke();
       });
     }
     // top + gölge

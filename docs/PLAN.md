@@ -16,19 +16,21 @@ Bu fazın çıktısı Faz 1'in sırasını belirler.
 - ⬜ Maç sonuçları gerçekçi mi (çok gol / çok az gol, güçlü takım hep mi kazanıyor)
 - ⬜ Transfer ekonomisi dengeli mi (bütçeler çok mu bol/kıt, açık artırma eğlenceli mi)
 
-## Faz 1 — Oynanabilirlik (1-2 oturum)
+## Faz 1 — Oynanabilirlik ✅ (2 Kasım 2026; 1.8 hariç)
+
+Ek olarak: yapay zeka takımları (tek başına oynama), hazırlık maçı, saatli maçların canlı izlenmesi.
 
 Arkadaş grubunda oyunun akıcı dönmesi için gerekenler.
 
 | # | Madde | Neden | Tür |
 |---|---|---|---|
-| 1.1 | **"Hazırım" sistemi**: her menajer haftaya hazır olduğunu işaretler, hepsi hazır olunca oda sahibine haber gider (istenirse otomatik oynar) | Oda sahibi kimseyi beklemeden oynatmasın | S + İ |
-| 1.2 | **Otomatik hafta**: oda ayarı "her gün 21:00'de oyna" gibi; `pg_cron` ile | Herkes aynı anda online olmak zorunda kalmasın | S + İ |
-| 1.3 | **Haftanın tüm maçları**: özet ekranında hafta sonuçları + "hepsini izle" | Arkadaşların maçlarını da görmek eğlenceli | İ |
-| 1.4 | **Telefona kurulum (PWA)**: ana ekrana ekle, uygulama gibi açılsın, simge | Linki her seferinde aramamak için | İ |
-| 1.5 | **Yapay zeka kulüplerinden teklif**: her hafta bazı menajer oyuncularına YZ kulüpleri teklif yapar, menajer kabul/ret eder | Satış tarafı da canlı olsun, bütçe dengesi | S + İ |
-| 1.6 | **Transfer dönemi ayarı**: "her zaman açık" / "sadece devre arası ve sezon arası" | Sezon ortası kadro kurma yarışını sınırlamak isteyen gruplar için | S + İ |
-| 1.7 | **Oda sahibini devretme / oyuncuyu odadan çıkarma** (lobide) | Gruptan biri bırakırsa oda tıkanmasın | S + İ |
+| 1.1 | ✅ **"Hazırım" sistemi**: her menajer haftaya hazır olduğunu işaretler, hepsi hazır olunca oda sahibine haber gider (istenirse otomatik oynar) | Oda sahibi kimseyi beklemeden oynatmasın | S + İ |
+| 1.2 | ✅ **Otomatik hafta**: oda ayarı "her gün 21:00'de oyna" gibi; `pg_cron` ile | Herkes aynı anda online olmak zorunda kalmasın | S + İ |
+| 1.3 | ✅ **Haftanın tüm maçları**: özet ekranında hafta sonuçları + "hepsini izle" | Arkadaşların maçlarını da görmek eğlenceli | İ |
+| 1.4 | ✅ **Telefona kurulum (PWA)**: ana ekrana ekle, uygulama gibi açılsın, simge | Linki her seferinde aramamak için | İ |
+| 1.5 | ✅ **Yapay zeka kulüplerinden teklif**: her hafta bazı menajer oyuncularına YZ kulüpleri teklif yapar, menajer kabul/ret eder | Satış tarafı da canlı olsun, bütçe dengesi | S + İ |
+| 1.6 | ✅ **Transfer dönemi ayarı**: "her zaman açık" / "sadece devre arası ve sezon arası" | Sezon ortası kadro kurma yarışını sınırlamak isteyen gruplar için | S + İ |
+| 1.7 | ✅ **Oda sahibini devretme / oyuncuyu odadan çıkarma** (lobide) | Gruptan biri bırakırsa oda tıkanmasın | S + İ |
 | 1.8 | **Şifremi unuttum** | Unutan kalırsa hesaba dönebilsin | İ + **K**: Supabase'e kendi SMTP'n (ör. Gmail uygulama şifresi / Resend) — ücretsiz SMTP saatte 2 e-posta |
 
 ## Faz 2 — Oyun derinliği (2-4 oturum)

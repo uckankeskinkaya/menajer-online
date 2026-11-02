@@ -253,7 +253,7 @@ async function reload() {
     S.fixtures = f.data.filter((x) => x.comp !== 'friendly');
     S.friendlies = f.data.filter((x) => x.comp === 'friendly').sort((a, b) => b.id - a.id);
     S.news = n.data;
-    const owners = t.data.map((x) => x.owner).filter((x) => !S.usernames.has(x));
+    const owners = t.data.map((x) => x.owner).filter((x) => x && !S.usernames.has(x));
     if (owners.length) {
       const { data } = await sb.from('profiles').select('id,username').in('id', owners);
       data?.forEach((p) => S.usernames.set(p.id, p.username));
@@ -427,14 +427,17 @@ function renderLobby() {
   $('#btnCopy').onclick = () => navigator.clipboard?.writeText(S.game.code).then(() => toast('Kod kopyalandı', 'ok'));
   $('#btnShare') && ($('#btnShare').onclick = () => navigator.share({ title: 'Menajer Online', text: `"${S.game.name}" odama katıl! Kod: ${S.game.code}`, url: location.origin + location.pathname }));
   const form = $('#setForm');
-  form.oninput = () => { $('#sqTotal').textContent = ['S', 'A', 'B', 'C', 'D'].reduce((a, k) => a + Number(form[`sq_${k}`].value || 0), 0); };
+  form.oninput = () => {
+    $('#sqTotal').textContent = ['S', 'A', 'B', 'C', 'D'].reduce((a, k) => a + Number(form[`sq_${k}`].value || 0), 0);
+    if ($('#btnStart')) $('#btnStart').disabled = S.teams.length + Number(form.bots.value || 0) < 2;
+  };
   if (own) {
     form.onsubmit = async (e) => {
       e.preventDefault();
       const ns = settingsFromForm(form);
       if (!ns) return;
-      await act('update_settings', { p_game: S.gameId, p_settings: ns }, { quiet: true });
-      toast('Ayarlar kaydedildi', 'ok');
+      const r = await act('update_settings', { p_game: S.gameId, p_settings: ns }, { quiet: true });
+      if (r.ok) { toast('Ayarlar kaydedildi', 'ok'); renderGame(); }
     };
     $('#btnStart').onclick = async () => {
       const ns = settingsFromForm(form);
