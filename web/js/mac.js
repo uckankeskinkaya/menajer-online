@@ -185,8 +185,9 @@ class Pitch2D {
 // Türkçe ek: isme ünlü uyumuyla belirtme (-ı/-i/-u/-ü) ya da ayrılma (-dan/-den/-tan/-ten) eki
 function trEk(name, kind) {
   const tr = { 'ü': '1', 'ö': '2', 'ç': '3', 'ş': '4', 'ğ': '5' }, back2 = { 1: 'ü', 2: 'ö', 3: 'ç', 4: 'ş', 5: 'ğ' };
-  const n = String(name || '').toLocaleLowerCase('tr').replace(/[üöçşğ]/g, (c) => tr[c]).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  let n = String(name || '').toLocaleLowerCase('tr').replace(/[üöçşğ]/g, (c) => tr[c]).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[1-5]/g, (d) => back2[d]).replace(/[^a-zçğıöşü]/g, '');
+  if (/[^aeıioöuü]y$/.test(n)) n = n.slice(0, -1) + 'i'; // Łakomy, Kenny: -yi
   const vs = n.match(/[aeıioöuü]/g), lv = vs ? vs[vs.length - 1] : 'e';
   const back = 'aıou'.includes(lv), round = 'ouöü'.includes(lv);
   if (kind === 'acc') return `'${/[aeıioöuü]$/.test(n) ? 'y' : ''}${back ? (round ? 'u' : 'ı') : (round ? 'ü' : 'i')}`;
@@ -838,7 +839,7 @@ export async function openMatch(sb, fid, opts) {
   if (startAt) { // ikinci yarı: ilk yarı olayları sessizce işlenir, saat 45'ten devam eder
     clock = startAt; tm = startAt; htShown = true;
     while (shown < timeline.length && timeline[shown].t <= clock - 0.05) emit(timeline[shown++], true);
-    nextClipIndex();
+    while (ci < clips.length && clips[ci].from < clock) ci++; // ilk yarının önemli anları tekrar oynatılmaz
   }
   if (live) {
     clock = liveT();

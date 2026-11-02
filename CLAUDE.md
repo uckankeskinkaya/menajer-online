@@ -17,7 +17,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 - **Oyuncular:** EA FC 26, 9 lig (ENG ESP GER FRA ITA NED POR TUR BEL), 4.647 oyuncu `real_players`'ta yüklü.
   Veri: `data/build_players.py` (kaynak: github.com/ismailoksuz/EAFC26-DataHub `data/players.csv`). Kalecilerde
   pac/sho/pas/dri/dfn/phy = diving/handling/kicking/reflexes/positioning/speed.
-- **Modlar:** ana ekranda Hızlı maç (iki gerçek kulüp), Kariyer (tek kişilik: gerçek kulüp ya da kurmaca takım + YZ rakipler, `schedule: manual`, "Devam et"), Arkadaşlarla (oda). FM havası: Özet'te sıradaki maç + yardımcı antrenör raporu, yönetim hedefi/güveni (istemcide kadro gücü sıralamasından), puan durumunda form.
+- **Modlar:** ana ekranda Hızlı maç (iki gerçek kulüp), Kariyer (tek kişilik: gerçek kulüp ya da kurmaca takım + YZ rakipler, `schedule: manual`, "Devam et"; menajerin maçı 45'te durur, devre arası kararları `play_second_half`), Arkadaşlarla (oda). FM havası: Özet'te sıradaki maç + yardımcı antrenör raporu, yönetim hedefi/güveni (istemcide kadro gücü sıralamasından), puan durumunda form.
 - **Takımlar kurmaca.** Oda kurulur, arkadaşlar 6 haneli kodla katılır. `settings.bots` kadar yapay zeka takımı başlarken eklenir (`teams.is_bot`, `owner` null); teklife anında karar verir. Sezonda ayrılan/çıkarılan menajerin takımı YZ'ye geçer.
 - **Format seçilebilir:** `league` / `cup` / `league_cup`; lig tek/çift devre (`legs`); kupa tek maç/rövanşlı (`cup_legs`, final hep tek maç);
   takım sayısı (`max_teams`); bütçe (`start_budget`). Ayarlar `games.settings`, varsayılanlar `_default_settings()`.
@@ -61,8 +61,8 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 021_moral_etkisi | ✅ `execute_sql`: `_power` moral ±%4.5, `_sim_fixture` maç sonu moral |
 | 022_yeni_sezon | ✅ kullanıcı SQL Editor'den (girinti farkı dışında aynı; canlıda sezon sonu + yeni sezon test edildi): `new_season` sözleşme bitişi (bedelsiz ayrılık) + altyapıdan 2 genç + moral sıfırlama |
 | 023_moral_ayar | ✅ `execute_sql`: moral etkisi ±%1.8 (021'deki ±%4.5 kartopu etkisiyle gol ortalamasını 4.2'ye çıkarmıştı), maç sonu ±4, her maç 70'e %10 dönüş → canlıda 380 maçta 2.66 gol |
-| 024_devre_arasi | ⏳ kullanıcı SQL Editor'den: `play_second_half(p_game, p_talk, p_mentality, p_lineup)` (takım konuşması ±%3, aynı mevkiye en fazla kalan hak kadar değişiklik, YZ gerideyse hücum) |
-| 025_iki_yari | ⏳ 024'ten SONRA `execute_sql`: `_sim_fixture` 45'te durabilir (`stats.stop`), durum `stats.ht`; `_play_round` kariyerde menajerin maçını durdurur ve haftayı bekletir; `_play_fixture` ödülleri maç bitince; `_auto_tick` devre arasındakini atlar |
+| 024_devre_arasi | ✅ kullanıcı SQL Editor'den (girinti farkı dışında aynı): `play_second_half(p_game, p_talk, p_mentality, p_lineup)` (takım konuşması ±%3, aynı mevkiye en fazla kalan hak kadar değişiklik, YZ gerideyse hücum) |
+| 025_iki_yari | ✅ `execute_sql` (md5 yerel kopyayla aynı; canlıda tarayıcıdan uçtan uca denendi): `_sim_fixture` 45'te durabilir (`stats.stop`), durum `stats.ht`; `_play_round` kariyerde menajerin maçını durdurur ve haftayı bekletir; `_play_fixture` ödülleri maç bitince; `_auto_tick` devre arasındakini atlar |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
