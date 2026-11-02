@@ -93,4 +93,4 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4h | Takım talimatları: pres / tempo / genişlik (maç motoru + Taktik ekranı + maç görüntüsü); YZ takımlarına kalıcı tarz; yardımcı antrenör rakip analizi | ✅ |
 | 4i | Maç görüntüsü yeniden yazıldı (sim.js): oyun kurulumu, pres + adam takibi, kaleci uzanması/tutma/çelme, dönen top, file dalgası, gol sevinci, daha hızlı 1x | ✅ |
 | 4j | Moral + basın toplantısı, sözleşmeler (uzatma / bedelsiz ayrılık), altyapıdan genç oyuncular | ✅ |
-| 4k | Devre arası kararları (kariyer): maç 45'te durur, takım konuşması, değişiklik, oyun anlayışı, talimat | 🟡 024 bekliyor |
+| 4k | Devre arası kararları (kariyer): maç 45'te durur, takım konuşması, değişiklik, oyun anlayışı, talimat | ✅ |
