@@ -89,3 +89,4 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4d | Yardımcı antrenör maç önü raporu, yönetim hedefi ve güveni, form | ✅ |
 | 4e | FM finansı: oyuncu maaşları, maaş bütçesi, sponsor/TV, bilet, itibar, sezon gelir-gider defteri (Kadro → Finans) | ✅ |
 | 4f | Gerçek kulüp renkleri; yıldızlar lig içi sıra + Avrupa seviyesi | ✅ |
+| 4g | Gerçekçi maç görüntüsü: kare kare simülasyon (hız/ivme sınırı, şutçu topu alıp şut çeker, kaleci kurtarır/kale vuruşu, gol sonrası santra), 3D gerçek oranlar (oyuncu ~1.85 m, kale 7.32×2.44 m) | ✅ |
