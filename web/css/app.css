@@ -299,3 +299,49 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .fe .in { color: #86efac; } .fe .out { color: #fca5a5; }
 @keyframes blink { 50% { opacity: .45; } }
 .pdot { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 3px solid; font-family: var(--disp); font-weight: 800; line-height: 1; box-shadow: 0 3px 6px rgba(0,0,0,.45); }
+.mstage .m3d { position: absolute; inset: 0; display: none; }
+.mstage.is3d { aspect-ratio: 0.8; } .mstage.is3d .m3d { display: block; } .mstage.is3d #pitchCv { visibility: hidden; }
+.mstage.cut::after { content: ''; position: absolute; inset: 0; background: #000; opacity: .35; animation: cut .25s forwards; pointer-events: none; }
+@keyframes cut { to { opacity: 0; } }
+.mphase { position: absolute; top: 8px; right: 10px; z-index: 2; font: 800 14px/1 var(--disp); color: #fff; background: rgba(8,14,26,.7); padding: 5px 8px; border-radius: 8px; opacity: 0; transition: opacity .2s; }
+.mphase.show { opacity: 1; }
+
+/* ---------- ana ekran modları ---------- */
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.mode-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 16px; border-radius: var(--r); border: 1px solid var(--line2); color: var(--text); cursor: pointer; font: inherit; min-height: 118px; position: relative; overflow: hidden; transition: transform .1s; }
+.mode-card:active { transform: scale(.98); }
+.mode-card b { font: 800 22px/1.1 var(--disp); letter-spacing: .02em; }
+.mode-card small { color: rgba(255,255,255,.75); font-size: 12px; }
+.mode-card .mc-ic { font-size: 26px; }
+.mode-card.quick { background: linear-gradient(135deg, #1d4ed8, #0f1f4d); grid-column: 1 / -1; min-height: 96px; }
+.mode-card.career { background: linear-gradient(135deg, #a16207, #3d2600); }
+.mode-card.friends { background: linear-gradient(135deg, #15803d, #0b2e1a); }
+.mode-card::after { content: ''; position: absolute; right: -30px; bottom: -30px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,.07); }
+.vs { text-align: center; font: 800 18px/1 var(--disp); color: var(--muted); margin: 4px 0; }
+.stars { color: var(--gold); letter-spacing: 1px; font-size: 13px; white-space: nowrap; } .stars i { color: #3a4560; font-style: normal; }
+.clubs .lrow.sel { background: rgba(34,197,94,.14); box-shadow: inset 0 0 0 1px var(--pri-d); }
+.rank { width: 22px; text-align: center; font: 800 15px/1 var(--disp); color: var(--muted); }
+
+/* ---------- FM: sıradaki maç, asistan, yönetim, form ---------- */
+.nextmatch { background: linear-gradient(160deg, #1b2a4d, var(--card) 70%); }
+.nm-head { display: flex; justify-content: space-between; gap: 8px; }
+.nm-head small { font-weight: 700; letter-spacing: .06em; }
+.nm-teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin: 12px 0; text-align: center; }
+.nm-teams > div { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.nm-teams b { font: 800 18px/1.1 var(--disp); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nm-vs { font: 800 22px/1 var(--disp); color: var(--dim); }
+.form { display: inline-flex; gap: 3px; vertical-align: middle; }
+.form i { font: 800 11px/1 var(--disp); font-style: normal; width: 17px; height: 17px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; color: #fff; }
+.form .f-G { background: #16a34a; } .form .f-B { background: #64748b; } .form .f-M { background: #dc2626; }
+.assist { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.as-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.as-av { width: 36px; height: 36px; border-radius: 50%; background: var(--card3); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.as-head small { display: block; font-size: 11px; }
+.assist ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 13.5px; }
+.assist i { color: #bbf7d0; }
+.board .conf { height: 8px; background: #26324d; border-radius: 4px; overflow: hidden; margin: 6px 0 4px; }
+.board .conf i { display: block; height: 100%; border-radius: 4px; }
+.mboard { position: relative; }
+.mclose { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line2); background: rgba(8,14,26,.6); color: var(--text); font-size: 14px; cursor: pointer; z-index: 3; }
+.mctrl { flex-wrap: nowrap; } .mctrl .seg.sm button { padding: 6px 8px; }
+.mboard .mteam.r { padding-right: 18px; }
