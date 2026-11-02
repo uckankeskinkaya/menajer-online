@@ -359,3 +359,4 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .stars.mini { font-size: 10px; letter-spacing: 0; }
 .finhero .stars { display: block; font-size: 22px; margin-top: 4px; }
 .mctrl #mNames.on { color: var(--pri); border-color: var(--pri); }
+.fe.pen { background: rgba(250,204,21,.1); border-color: #854d0e; } .fe.pen .fi { background: var(--gold); border-radius: 50%; } .fe.fk .fi { background: var(--warn); }
