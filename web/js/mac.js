@@ -129,6 +129,16 @@ class Pitch2D {
         drawDot(ctx, 0, 0, size / 2, kit, st.num(st.ids[it.s][it.i]));
         ctx.restore();
       } else drawDot(ctx, X(it.p.x), Y(it.p.y), size / 2, kit, st.num(st.ids[it.s][it.i]), { highlight: isC });
+      if (st.prev && !down) { // koştuğu yön: dairenin kenarında küçük çentik
+        const q = st.prev[it.s][it.i], vx = (it.p.x - q.x) * w, vy = (it.p.y - q.y) * h, sp = Math.hypot(vx, vy);
+        if (sp > 0.6) {
+          const ux = vx / sp, uy = vy / sp, R0 = size / 2 + 1.5, cx = X(it.p.x), cy = Y(it.p.y);
+          ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath();
+          ctx.moveTo(cx + ux * (R0 + size * 0.22), cy + uy * (R0 + size * 0.22));
+          ctx.lineTo(cx + ux * R0 - uy * size * 0.16, cy + uy * R0 + ux * size * 0.16);
+          ctx.lineTo(cx + ux * R0 + uy * size * 0.16, cy + uy * R0 - ux * size * 0.16); ctx.fill();
+        }
+      }
       if (isC) carrier = it;
       else if (st.showNames) { // soyadı, dairenin altında
         const nm = (st.name(st.ids[it.s][it.i]) || '').split(' ').pop();
@@ -149,6 +159,14 @@ class Pitch2D {
       ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - tw / 2, y, tw, size * 0.62, 6) : ctx.rect(x - tw / 2, y, tw, size * 0.62); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(name, x, y + size * 0.31);
+    }
+    { // topun izi (pas ve şutlarda)
+      const bx = X(st.ball.x), by = Y(st.ball.y) - st.ball.z * 2.4, tr = (this.trail ||= []);
+      const lastP = tr[tr.length - 1];
+      if (lastP && Math.hypot(bx - lastP.x, by - lastP.y) > 40) tr.length = 0; // sahne geçişi
+      tr.push({ x: bx, y: by }); if (tr.length > 9) tr.shift();
+      const moving = st.carrier === null && tr.length > 2 && Math.hypot(bx - tr[0].x, by - tr[0].y) > 6;
+      if (moving) { ctx.save(); ctx.lineCap = 'round'; for (let i = 1; i < tr.length; i++) { ctx.strokeStyle = `rgba(255,255,255,${0.05 + 0.4 * i / tr.length})`; ctx.lineWidth = Math.max(1, w * 0.004 * (i / tr.length) * 2.2); ctx.beginPath(); ctx.moveTo(tr[i - 1].x, tr[i - 1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke(); } ctx.restore(); }
     }
     const b = st.ball, r = Math.max(3.5, w * 0.014);
     ctx.fillStyle = 'rgba(0,0,0,.35)';
@@ -433,6 +451,9 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   // ---- önemli anlar: goller, kurtarışlar, kırmızı kartlar ve birkaç kaçırma normal hızda; aralar hızla geçer ----
   const CLIP_RATE = 1 / SPM; // normal hız: maç dakikası / sn
   const GAP_RATE = 9;       // aralarda saat: maç dakikası / sn
+  const FULL_RATE = 3 / SPM; // tam maç: aralar 3 kat hızda
+  let full = false;
+  try { full = localStorage.getItem('mac-tam') === '1'; } catch { /* yok */ }
   const misses = evs.filter((e) => e.ev === 'miss');
   const pickedMiss = new Set(misses.filter(() => R() < 0.35).slice(0, 4).concat(misses.filter((e) => e.m >= 85).slice(0, 1)));
   let clips = [];
@@ -488,6 +509,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       <button class="btn sm" id="mNext" title="Sonraki an">⏩</button>
       <button class="btn sm" id="mEnd" title="Sona atla">⏭</button>
     </div>
+    ${live ? '' : '<div class="seg sm mview" id="mView"><button data-v="ozet">Önemli anlar</button><button data-v="tam">Tam maç</button></div>'}
     <div class="mstats" id="mStats"></div>
     <div class="mfeed" id="mFeed"></div>
   </div>`;
@@ -599,7 +621,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   function startClip(c) {
     clip = c; phase = 'clip'; tm = c.from; clock = Math.max(clock, c.from);
     phaseLabel('');
-    document.getElementById('mStage').classList.add('cut');
+    if (!full) document.getElementById('mStage').classList.add('cut');
     setTimeout(() => document.getElementById('mStage')?.classList.remove('cut'), 250);
   }
   function nextClipIndex() { while (ci < clips.length && clips[ci].to < clock - 0.2) ci++; return ci; }
@@ -639,13 +661,17 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
         }
       }
     } else {
-      // ara: sahada sakin oyun normal hızda, saat hızla bir sonraki ana koşar
+      // ara: özet modunda saat hızla bir sonraki ana koşar (sahne kesilir); tam maçta oyun kesintisiz ~3 kat hızda akar
       const i = nextClipIndex();
       const nxt = clips[i];
-      if (!live) clock = Math.min(nxt ? nxt.from : 95, clock + dt * GAP_RATE * sp);
-      const cap = nxt ? nxt.from - 0.1 : 95;
-      tm = Math.min(cap, tm + dt * CLIP_RATE * sp);
-      phaseLabel(nxt && !live && clock < nxt.from - 1 ? '⏩' : '');
+      if (full && !live) {
+        clock = Math.min(nxt ? nxt.from : 95, clock + dt * FULL_RATE * sp); tm = clock; phaseLabel('');
+      } else {
+        if (!live) clock = Math.min(nxt ? nxt.from : 95, clock + dt * GAP_RATE * sp);
+        const cap = nxt ? nxt.from - 0.1 : 95;
+        tm = Math.min(cap, tm + dt * CLIP_RATE * sp);
+        phaseLabel(nxt && !live && clock < nxt.from - 1 ? '⏩' : '');
+      }
       if (nxt && clock >= nxt.from) { ci = i + 1; startClip(nxt); }
       else if (!nxt && clock >= (live ? 95 : 94.9)) { if (!startPens()) finish(); }
       if (!nxt) tm = Math.min(tm, sim.T_END - 0.1);
@@ -653,11 +679,12 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     pump();
   }
   function endClip() { phase = 'gap'; tm = clip.to; clip = null; }
+  const prevFrame = { ply: { h: Array.from({ length: 11 }, () => ({ x: 0, y: 0 })), a: Array.from({ length: 11 }, () => ({ x: 0, y: 0 })) }, ball: { x: 0, y: 0, z: 0 } };
   function render(dt) {
-    let fr = frame, lu;
+    let fr = frame, lu, prev = null;
     if (phase === 'pens') { fr = pensState(); lu = pens.lu; }
-    else { frameAt(sim, tm, frame); lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock)); }
-    const st = { ply: fr.ply, ids: lu.ids, gone: lu.gone, kits, ball: fr.ball, carrier: fr.carrier, fallen: fr.fallen, dive: fr.dive || { h: 0, a: 0 }, ripple: fr.ripple || 0, num, name: (id) => names.get(id) || '', showNames };
+    else { frameAt(sim, tm, frame); frameAt(sim, Math.max(0, tm - 0.04), prevFrame); prev = prevFrame.ply; lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock)); }
+    const st = { ply: fr.ply, ids: lu.ids, gone: lu.gone, kits, ball: fr.ball, carrier: fr.carrier, prev, fallen: fr.fallen, dive: fr.dive || { h: 0, a: 0 }, ripple: fr.ripple || 0, num, name: (id) => names.get(id) || '', showNames };
     if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
   }
   function endLive() {
@@ -791,6 +818,16 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     showNames = !showNames; namesBtn.classList.toggle('on', showNames);
     try { localStorage.setItem('mac-isim', showNames ? '1' : '0'); } catch { /* yok */ }
   };
+  const viewSeg = document.getElementById('mView');
+  if (viewSeg) {
+    const mark = () => viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b.dataset.v === 'tam') === full));
+    mark();
+    viewSeg.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+      full = b.dataset.v === 'tam'; mark();
+      if (full && phase !== 'clip' && phase !== 'pens') tm = clock; // kesintisiz akışa geç
+      try { localStorage.setItem('mac-tam', full ? '1' : '0'); } catch { /* yok */ }
+    }));
+  }
   document.getElementById('mEnd').onclick = () => { pauseT = 0; finish(); };
   document.getElementById('mClose').onclick = close;
   statsHtml();

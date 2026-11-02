@@ -378,3 +378,4 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .renew small { flex-basis: 100%; }
 .press .col { display: grid; gap: 8px; margin: 8px 0; }
 .press .col .btn { text-align: left; white-space: normal; line-height: 1.3; }
+.mview { display: flex; margin-top: 6px; } .mview button { flex: 1; }
