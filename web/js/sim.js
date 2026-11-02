@@ -65,8 +65,11 @@ export function simulateMatch(fx, events, R, ins = {}) {
   let holder = J(R() < poss ? 'h' : 'a', 10), flight = null, loose = null, nextAct = 0.6;
   let dead = null, restart = null, mode = null; // mode: önemli an planı
   let ei = 0, fi = 0, t = 0, fallen = -1;
-  let tackleT = 0, cornerClear = null;
+  let tackleT = 0, cornerClear = null, duelT = -9;
+  const lunge = {}, side = {}; // ikili mücadele: savunmacı dalışı, hücumcunun sıyrılması
   const gkMove = {}; // kaleci uzanması (kinematik)
+  // her oyuncunun kendine özgü küçük sapmaları ve hareket ritmi: kimse sıra hâlinde heykel gibi durmasın
+  const pers = Array.from({ length: 22 }, () => ({ ox: (R() - 0.5) * 5, oy: (R() - 0.5) * 5, ph: R() * 6.28, fr: 0.6 + R() * 0.7, run: R() * 6.28 }));
 
   const possSide = () => (holder !== null ? sideOf(holder) : flight && flight.kind !== 'shot' ? flight.side : loose ? sideOf(loose.to) : null);
   const nearest = (s, pt, skipGK = true, skip = []) => {
@@ -228,7 +231,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
       if (!me.setup && possSide() !== s) {
         if (holder !== null && t >= nextAct) {
           const tk = nearest(s, P[holder]);
-          if (dist(P[tk], P[holder]) < 1.6) { holder = tk; nextAct = t + 0.35; tackleT = t; }
+          if (dist(P[tk], P[holder]) < 2.5) { holder = tk; nextAct = t + 0.35; tackleT = t; }
         } else if (loose && t - loose.t0 > 0.3) { const a = nearest(s, ball), b2 = nearest(d, ball); if (dist(P[a], ball) < dist(P[b2], ball) + 6) loose.to = a; }
         else if (flight && flight.kind === 'pass' && flight.side !== s && !flight.cut) { // pas araya girer
           const u = (t - flight.t0) / (flight.t1 - flight.t0);
@@ -264,7 +267,8 @@ export function simulateMatch(fx, events, R, ins = {}) {
         let blow = false;
         if (!q.hand && holder === q.W && dist(P[q.F], P[q.W]) < 1.3 && (me.style === 'pen' ? inBox : !inBox)) blow = true;
         if (q.hand && q.touched) blow = true;
-        if (t > q.t0 + 9) blow = true;
+        if (t > q.t0 + 9 && (q.hand || me.style !== 'pen' || inBox)) blow = true;
+        if (t > q.t0 + 15) blow = true; // son çare
         if (blow) {
           me.setup = true; me.setT = t;
           if (!q.hand) { fallen = q.W; P[q.W].down = t + 1.6; }
@@ -451,15 +455,44 @@ export function simulateMatch(fx, events, R, ins = {}) {
         if (best >= 0 && bd < 18) { used.add(best); marks.set(best, a); }
       }
     }
+    // ikili mücadele: presçi yapışınca müdahaleye dalar; önemli anda hücumcu sıyrılır, açık oyunda bazen top kaybedilir
+    if (p1 >= 0 && holder !== null && holder % 11 && !dead && !(mode && mode.e.pre && !mode.e.setup) && t > duelT + 1.6 && dist(P[p1], P[holder]) < 1.5) {
+      duelT = t;
+      const h = P[holder], hs = sideOf(holder), ax = h.x - P[p1].x, ay = h.y - P[p1].y, L = Math.hypot(ax, ay) || 1;
+      lunge[p1] = { until: t + 0.45, x: h.x + ax / L * 2.2, y: h.y + ay / L * 2.2 };
+      const keep = mode ? mode.s === hs : R() < 0.62; // önemli anda hücum edecek takım kazanır
+      if (keep) { const sd2 = R() < 0.5 ? -1 : 1; side[holder] = { until: t + 0.55, x: clamp(h.x - ay / L * 3 * sd2 + (PW / 2 - h.x) * 0.05, 3, PW - 3), y: h.y + dirY(hs) * 3.5 }; nextAct = Math.max(nextAct, t + 0.5); }
+      else { holder = p1; nextAct = t + 0.6; tackleT = t; }
+    }
     for (let j = 0; j < 22; j++) {
       const s = sideOf(j), k = j % 11, p = P[j], ro = roles[s][k], bk = blk[s];
       let tx, ty, vmax = JOG;
-      // temel: takım bloğu
-      tx = clamp(PW / 2 + (ro.fx - 0.5) * 1.45 * PW * bk.wid + (bxm - PW / 2) * bk.sh, 3, PW - 3);
-      let g = bk.line + ro.r * bk.len;
+      // temel: canlı takım şekli — blok topa kayar ve daralır, hatlar kademeli, herkes sürekli küçük hareketler yapar
+      const pe = pers[j], own = bk.own, wd2 = IN[s].width - 1;
+      const cxs = PW / 2 + (bxm - PW / 2) * (own ? 0.32 : 0.55);
+      const wdt = own ? PW * 0.84 * (1 + wd2 * 0.07) : PW * 0.52;
+      tx = cxs + (ro.fx - 0.5) * wdt + pe.ox * (ro.r < 0.2 ? 0.4 : 1);
+      let g = bk.line + ro.r * bk.len + pe.oy * (ro.r < 0.2 ? 0.25 : 1);
+      if (own && ro.r > 0.3) g += Math.abs(ro.fx - 0.5) * 7;                // hücumda kanatlar biraz önde
+      if (!own && Math.abs(tx - bxm) > 22) tx += (bxm - tx) * 0.25;         // savunmada uzak taraf içeri kapanır
+      tx += Math.sin(t * 0.6 * pe.fr + pe.ph) * 2.2; g += Math.cos(t * 0.5 * pe.fr + pe.ph) * 1.6; // nefes alan şekil
+      if (own && holder !== null && sideOf(holder) === s && !dead) {
+        const h = P[holder], hg = G(s, h.y);
+        if (ro.r > 0.9) { // forvet: bir topa gelir, bir savunma arkasına koşar
+          const cyc = Math.sin(t * 0.45 * pe.fr + pe.run);
+          if (cyc > 0.35) { g = Math.max(g, bk.off - 0.8); tx = lerp(tx, PW / 2 + (tx - PW / 2) * 0.6, 0.5); }
+          else if (cyc < -0.45) { g = Math.min(g, hg + 11); tx = lerp(tx, h.x, 0.35); }
+        } else if (ro.r < 0.15 && Math.abs(ro.fx - 0.5) > 0.3 && hg > PL * 0.5 && Math.sign(h.x - PW / 2) === Math.sign(ro.fx - 0.5)) {
+          g = Math.max(g, Math.min(hg + 3, bk.off - 2)); tx = ro.fx < 0.5 ? 4 : PW - 4; // bek bindirmesi
+        } else if (ro.r >= 0.3 && ro.r <= 0.8 && dist(p, h) < 28 && j !== holder) { // orta saha: pas üçgeni
+          const sideX = (pe.ph > 3.14 ? 1 : -1) * (9 + pe.fr * 4);
+          tx = lerp(tx, clamp(h.x + sideX, 4, PW - 4), 0.55); g = lerp(g, hg + (pe.oy > 0 ? 7 : -4), 0.5);
+        }
+      }
       if (bk.own) g = Math.min(g, bk.off - 1.2);
+      tx = clamp(tx, 2.5, PW - 2.5);
       ty = Yg(s, clamp(g, 7, PL - 6));
-      if (Math.abs(G(s, p.y) - g) > 10) vmax = RUN * 0.85;
+      if (Math.abs(G(s, p.y) - g) > 10 || Math.abs(p.x - tx) > 12) vmax = RUN * 0.85;
 
       if (dead) {
         ({ tx, ty, vmax } = deadTarget(j, s, k, p, ro, tx, ty, vmax));
@@ -473,6 +506,13 @@ export function simulateMatch(fx, events, R, ins = {}) {
         if (j === holder) {
           // top sürme: boşluğa doğru; önemli anda şutçu kaleye, kanatçı çizgiye
           tx = p.x + (PW / 2 - p.x) * 0.05; ty = Yg(s, Math.min(G(s, p.y) + 4, Math.max(G(s, p.y), PL - 22))); vmax = JOG * 0.85;
+          { // baskı varsa topu kendinden uzaklaştırır, önü boşsa hızla taşır
+            const op = nearest(other(s), p, false), od = dist(P[op], p);
+            if (od < 3.2 && !(mode && mode.s !== s)) { const ax = p.x - P[op].x, ay = p.y - P[op].y, L = Math.hypot(ax, ay) || 1; tx = p.x + ax / L * 4 + (PW / 2 - p.x) * 0.15; ty = p.y + ay / L * 2 + dirY(s) * 2; vmax = JOG * 0.8; }
+            else if (od > 9 && G(s, p.y) < PL - 25) { ty = Yg(s, G(s, p.y) + 8); vmax = RUN * 0.75; }
+          }
+          if (side[j] && t < side[j].until) { tx = side[j].x; ty = side[j].y; vmax = SPRINT; } // çalımla sıyrılış
+          tx = clamp(tx, 2, PW - 2); ty = clamp(ty, 2, PL - 2);
           if (me && me.s === s && j === me.winger) { tx = mode.wx; ty = Yg(s, PL - 9); vmax = RUN * 0.8; }
           else if (me && me.s === s && j === me.shooter && me.spot) { tx = me.spot.x; ty = me.spot.y; vmax = JOG; }
           if (me && me.pre && j === me.pre.W) { // pen: ceza sahasına dalar; fk: ceza sahası önünde kalır
@@ -492,6 +532,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
             else { tx = W.x; ty = W.y; vmax = SPRINT; }
           }
         } else if (me && me.pre && j === me.pre.W && holder !== j) { tx = me.pre.tp.x; ty = me.pre.tp.y; vmax = RUN; }
+        else if (lunge[j] && t < lunge[j].until) { tx = lunge[j].x; ty = lunge[j].y; vmax = SPRINT; } // müdahaleye dalış
         else if (j === p1) { // topa bas: adamın 1 m önünde, kale tarafında
           const h = P[holder], gl = goalY(other(s));
           const ux = (gl === 0 ? 0 : 0) , dy = gl - h.y, L = Math.abs(dy) || 1;
