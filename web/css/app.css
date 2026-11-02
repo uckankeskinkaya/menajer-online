@@ -365,3 +365,4 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .stypes > div { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .stypes .chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--card2); border: 1px solid var(--line); color: var(--text); }
 .stypes .chip b { color: var(--pri); }
+.fe.comm { background: transparent; border-color: transparent; color: var(--muted); font-style: italic; font-size: 13px; padding-top: 2px; padding-bottom: 2px; }

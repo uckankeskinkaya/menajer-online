@@ -583,6 +583,16 @@ function simulateMatch(fx, events, R) {
   }
   return { frames, N, evs: shots, T_END, fouls, corners };
 }
+// Türkçe ek: isme ünlü uyumuyla belirtme (-ı/-i/-u/-ü) ya da ayrılma (-dan/-den/-tan/-ten) eki
+function trEk(name, kind) {
+  const tr = { 'ü': '1', 'ö': '2', 'ç': '3', 'ş': '4', 'ğ': '5' }, back2 = { 1: 'ü', 2: 'ö', 3: 'ç', 4: 'ş', 5: 'ğ' };
+  const n = String(name || '').toLocaleLowerCase('tr').replace(/[üöçşğ]/g, (c) => tr[c]).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[1-5]/g, (d) => back2[d]).replace(/[^a-zçğıöşü]/g, '');
+  const vs = n.match(/[aeıioöuü]/g), lv = vs ? vs[vs.length - 1] : 'e';
+  const back = 'aıou'.includes(lv), round = 'ouöü'.includes(lv);
+  if (kind === 'acc') return `'${/[aeıioöuü]$/.test(n) ? 'y' : ''}${back ? (round ? 'u' : 'ı') : (round ? 'ü' : 'i')}`;
+  return `'${/[çfhkpsşt]$/.test(n) ? 't' : 'd'}${back ? 'a' : 'e'}n`;
+}
 // seri penaltı: kurallara uygun ve sunucudaki skorla (ör. "4-3") birebir biten atış dizisi
 function shootout(pens, R) {
   const m = /^(\d+)-(\d+)$/.exec(String(pens || '').trim());
@@ -865,6 +875,32 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   clips.sort((a, b) => a.from - b.from);
   clips = clips.reduce((acc, c) => { const p = acc[acc.length - 1]; if (p && c.from < p.to) { p.to = Math.max(p.to, c.to); p.goal = p.goal || c.goal; } else acc.push({ ...c }); return acc; }, []);
   const clipEv = new Set(clips.flatMap((c) => evs.filter((e) => e.t >= c.from && e.t <= c.to)));
+  // ---- anlatım: önemli anlarda topun geçtiği oyunculardan üretilen satırlar ----
+  {
+    const pick = (a) => a[Math.floor(R() * a.length)];
+    const who = (t, j) => { const lu = lineupAt(t); const id = lu.ids[j < 11 ? 'h' : 'a'][j % 11]; return id ? (names.get(id) || '').split(' ').pop() : ''; };
+    for (const e of evs) {
+      if (!clipEv.has(e)) continue;
+      const t0 = Math.max(0.1, (e.pre ? e.pre.t0 : e.t - 1.3)), t1 = e.setT ?? e.t;
+      const seq = [];
+      for (let t = t0; t < t1; t += SIM_DT) {
+        const h = sim.frames[Math.floor(t / SIM_DT) * FRAME + 47];
+        if (h >= 0 && (h < 11 ? 'h' : 'a') === e.s && (!seq.length || seq[seq.length - 1].j !== h)) seq.push({ t, j: h });
+      }
+      const say = (t, txt) => txt && others.push({ m: e.m, t, s: e.s, ev: 'comm', txt });
+      const first = seq[0], passer = seq.length > 1 ? seq[seq.length - 2] : null, sh = who(e.t, e.shooter);
+      if (first && first.j !== e.shooter && e.style !== 'corner') say(first.t, pick([`${who(first.t, first.j)} topu aldı, ${esc((e.s === 'h' ? H : A)?.name || '')} hücumda`, `${who(first.t, first.j)} ileri taşıyor`, `${who(first.t, first.j)} oyunu kuruyor`]));
+      if (e.style === 'cross' && e.winger >= 0) say(t1 - 0.45, pick([`${who(t1, e.winger)} çizgiye indi… ortayı yaptı!`, `${who(t1, e.winger)} kanattan ortaladı`]));
+      else if (e.style === 'thru' && passer) say(passer.t + 0.05, pick([`${who(passer.t, passer.j)} ara pası verdi, ${sh} kaçtı!`, `${who(passer.t, passer.j)}${trEk(who(passer.t, passer.j), 'abl')} savunma arkasına harika pas`]));
+      else if (e.style === 'long') say(t1 - 0.25, pick([`${sh} ceza sahası dışından deniyor…`, `${sh} uzaktan vurmak için yer arıyor`]));
+      else if (e.style === 'corner' && e.cornered) say(t1 - 0.5, 'Korner… top ceza sahasına geliyor');
+      else if (e.style === 'pen') say(e.t - 0.3, `${sh} topun başında… koşuyor…`);
+      else if (e.style === 'fk') say(e.t - 0.3, `${sh} serbest vuruşun başında, baraj hazır`);
+      if (e.style === 'cross' || e.style === 'corner') say(e.t - 0.05, `${sh} kafayı vurdu!`);
+      else if (e.style !== 'pen' && e.style !== 'fk') say(e.t - 0.05, pick([`${sh} vuruyor!`, `${sh} şutunu çekti!`, `${sh} kaleyi yokluyor!`]));
+    }
+    timeline.length = 0; timeline.push(...[...evs, ...others].sort((a, b) => a.t - b.t));
+  }
 
   root.innerHTML = `
   <div class="mwrap">
@@ -916,6 +952,10 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     return { ids: cur, gone };
   }
   function emit(e, silent) {
+    if (e.ev === 'comm') { // anlatım sadece önemli an oynarken
+      if (phase === 'clip' && !replay) feed.insertAdjacentHTML('afterbegin', `<div class="fe comm"><span class="fm">${Math.min(90, Math.round(e.m))}'</span><span class="ft">${esc(e.txt)}</span></div>`);
+      return;
+    }
     let txt = '', cls = '';
     const team = e.s === 'h' ? H : A;
     const si = e.s === 'h' ? 0 : 1;
@@ -929,11 +969,11 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     } else if (e.ev === 'save') { ls.shots[si]++; ls.on[si]++; txt = e.pen ? `<b>Penaltı kurtarıldı!</b> ${nm(e.p)}` : e.fk ? `Kurtarış! ${nm(e.p)} serbest vuruşu` : `Kurtarış! ${nm(e.p)} şutu`; cls = 'save'; }
     else if (e.ev === 'miss') { ls.shots[si]++; txt = e.pen ? `<b>${nm(e.p)} penaltıyı kaçırdı!</b>` : e.fk ? `${nm(e.p)} serbest vuruşu dışarı attı` : `${nm(e.p)} auta attı`; cls = 'miss'; }
     else if (e.ev === 'penfoul') {
-      const why = e.c === 'hand' ? (e.p ? `${nm(e.p)} ceza sahasında elle oynadı` : 'ceza sahasında el') : (e.p ? `${nm(e.p)}, ${e.w ? nm(e.w) : 'rakibini'} ceza sahasında düşürdü` : 'ceza sahasında faul');
+      const why = e.c === 'hand' ? (e.p ? `${nm(e.p)} ceza sahasında elle oynadı` : 'ceza sahasında el') : (e.p ? `${nm(e.p)}, ${e.w ? nm(e.w) + trEk(names.get(e.w), 'acc') : 'rakibini'} ceza sahasında düşürdü` : 'ceza sahasında faul');
       txt = `<b>PENALTI!</b> ${why}`; cls = 'pen';
       if (!silent) flash(e.c === 'hand' ? 'PENALTI! · EL' : 'PENALTI! · FAUL', { c1: '#111827', c2: '#facc15' });
     } else if (e.ev === 'fkfoul') {
-      txt = `Faul: ${e.p ? nm(e.p) : 'savunmacı'}${e.w ? `, ${nm(e.w)}'i düşürdü` : ''} · serbest vuruş`; cls = 'fk';
+      txt = `Faul: ${e.p ? nm(e.p) : 'savunmacı'}${e.w ? `, ${nm(e.w)}${trEk(names.get(e.w), 'acc')} düşürdü` : ''} · serbest vuruş`; cls = 'fk';
       if (!silent) flash('FAUL · SERBEST VURUŞ', { c1: '#111827', c2: '#f59e0b' });
     }
     else if (e.ev === 'yellow') { txt = `${nm(e.p)}`; cls = 'yellow'; }
