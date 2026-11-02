@@ -185,3 +185,13 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .fe .fm { color: var(--muted); min-width: 26px; font-weight: 700; }
 .fe.goal { background: #134a26; font-size: 14px; } .fe.card { background: #3a3500; }
 .fe.a { flex-direction: row; }
+
+/* canlı maçlar */
+.fx.is-live { background: rgba(255,60,60,.1); border-radius: 8px; }
+.score.live { color: #ff5252; font-size: 12px; letter-spacing: .08em; animation: blink 1.4s infinite; }
+.live-card { border-color: #7a2a2a; }
+.livebadge { color: #ff5252 !important; animation: blink 1.4s infinite; }
+.mctrl.is-live #mSpeed, .mctrl.is-live #mPlay { display: none; }
+@keyframes blink { 50% { opacity: .45; } }
+.chk { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+.lrow .btn.sm { flex: none; }

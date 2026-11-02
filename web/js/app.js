@@ -15,7 +15,7 @@ const S = {
   gameId: null, game: null, teams: [], teamById: new Map(), myTeam: null, usernames: new Map(),
   own: new Map(),          // player_id -> squads satırı (bu odada)
   players: new Map(),      // player_id -> real_players satırı (önbellek)
-  offers: [], fixtures: [], news: [], standings: [],
+  offers: [], fixtures: [], friendlies: [], news: [], standings: [], liveSig: '',
   tab: 'ozet', sub: {}, channel: null, draft: null,
   mk: { q: '', lg: '', grp: '', min: 70, max: 99, price: '', owner: 'all', sort: 'ovr', rows: [], page: 0, more: false },
   lastResolve: 0, loading: false,
@@ -28,6 +28,7 @@ const isOwner = () => S.game && S.user && S.game.owner === S.user.id;
 const tname = (id) => S.teamById.get(id)?.name ?? '?';
 const tshort = (id) => S.teamById.get(id)?.short ?? '?';
 const pname = (id) => S.players.get(id)?.name ?? `#${id}`;
+const bidderName = (o) => (o.bidder ? tname(o.bidder) : `🤖 ${o.ai_club || 'Yapay zeka kulübü'}`);
 
 async function rpc(fn, args) {
   const { data, error } = await sb.rpc(fn, args);
@@ -68,7 +69,7 @@ async function route() {
     if (!S.game) return go('');
     if (p[2] === 'mac' && p[3]) {
       renderGame();
-      return openMatch(sb, Number(p[3]), { teamById: S.teamById, onClose: () => go(`oda/${S.gameId}/${S.tab}`) });
+      return openMatch(sb, Number(p[3]), { teamById: S.teamById, liveMs: LIVE_MS, onClose: () => go(`oda/${S.gameId}/${S.tab}`) });
     }
     if (p[2]) S.tab = p[2];
     return renderGame();
@@ -238,7 +239,7 @@ async function reload() {
       sb.from('teams').select('*').eq('game_id', id).order('created_at'),
       sb.from('squads').select('*').eq('game_id', id),
       sb.from('offers').select('*').eq('game_id', id).order('created_at', { ascending: false }).limit(300),
-      sb.from('fixtures').select('id,comp,round,cup_round,leg,tie,home,away,hg,ag,pens,played,winner').eq('game_id', id).order('round').order('id'),
+      sb.from('fixtures').select('id,comp,round,cup_round,leg,tie,home,away,hg,ag,pens,played,winner,kickoff_at').eq('game_id', id).order('round').order('kickoff_at', { nullsFirst: false }).order('id'),
       sb.from('news').select('*').eq('game_id', id).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(80),
     ]);
     for (const r of [g, t, q, o, f, n]) if (r.error) throw r.error;
@@ -249,7 +250,8 @@ async function reload() {
     S.myTeam = t.data.find((x) => x.owner === S.user.id) || null;
     S.own = new Map(q.data.map((x) => [x.player_id, x]));
     S.offers = o.data;
-    S.fixtures = f.data;
+    S.fixtures = f.data.filter((x) => x.comp !== 'friendly');
+    S.friendlies = f.data.filter((x) => x.comp === 'friendly').sort((a, b) => b.id - a.id);
     S.news = n.data;
     const owners = t.data.map((x) => x.owner).filter((x) => !S.usernames.has(x));
     if (owners.length) {
@@ -264,6 +266,24 @@ async function reload() {
   } catch (e) { toast(errText(e), 'err'); }
 }
 const hasLeague = () => ['league', 'league_cup'].includes(S.game?.settings?.format);
+const setting = (k, d) => S.game?.settings?.[k] ?? d;
+const isAuto = () => setting('schedule', 'manual') === 'auto';
+export const LIVE_MS = 9 * 60 * 1000; // canlı yayın süresi (90 dk = 9 gerçek dakika)
+const liveState = (f) => {
+  if (!f?.kickoff_at) return f?.played ? 'done' : 'wait';
+  const dt = Date.now() - new Date(f.kickoff_at);
+  if (dt < 0) return 'wait';
+  if (dt < LIVE_MS) return 'live';
+  return f.played ? 'done' : 'live';
+};
+const kickTxt = (iso) => new Date(iso).toLocaleString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const kickTime = (iso) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+function windowOpen() {
+  if (S.game?.status !== 'active') return false;
+  if (setting('transfer_window', 'always') === 'always') return true;
+  const half = Math.floor(Math.max(0, ...S.fixtures.filter((f) => f.comp === 'league').map((f) => f.round)) / 2);
+  return S.game.current_round === 0 || S.game.current_round === half;
+}
 const hasCup = () => ['cup', 'league_cup'].includes(S.game?.settings?.format);
 
 let reloadTimer;
@@ -293,6 +313,16 @@ async function subscribe(id) {
 // açık artırma sayaçları + süresi dolanları sonuçlandır
 setInterval(() => {
   $$('[data-exp]').forEach((el) => (el.textContent = timeLeft(el.dataset.exp)));
+  if (S.game && S.game.status !== 'lobby') {
+    const all = [...S.fixtures, ...S.friendlies];
+    const sig = all.map((f) => `${f.id}:${liveState(f)}`).join(',');
+    if (S.liveSig && sig !== S.liveSig) {
+      const mineLive = all.find((f) => liveState(f) === 'live' && (f.home === me()?.id || f.away === me()?.id) && !S.liveSig.includes(`${f.id}:live`));
+      if (mineLive) toast(`⚽ Maçın başladı! Özet'ten canlı izle`, 'ok');
+      if (!$('#match').classList.contains('show') && ['ozet', 'lig'].includes(S.tab)) refresh();
+    }
+    S.liveSig = sig;
+  }
   if (S.game?.status === 'active' && Date.now() - S.lastResolve > 8000 &&
       S.offers.some((o) => o.status === 'active' && new Date(o.expires_at) <= Date.now())) {
     S.lastResolve = Date.now();
@@ -342,7 +372,9 @@ function renderLobby() {
   </section>
   <section class="card">
     <h2>Takımlar (${S.teams.length}/${s.max_teams})</h2>
-    <div class="list">${S.teams.map((t) => `<div class="lrow">${teamDot(t)}<div class="grow"><b>${esc(t.name)}</b> <small>${esc(t.short)}</small><small>${esc(S.usernames.get(t.owner) || '')}${t.owner === S.game.owner ? ' 👑' : ''}</small></div></div>`).join('')}</div>
+    <div class="list">${S.teams.map((t) => `<div class="lrow">${teamDot(t)}<div class="grow"><b>${esc(t.name)}</b> <small>${esc(t.short)}</small><small>${esc(S.usernames.get(t.owner) || '')}${t.owner === S.game.owner ? ' 👑' : ''}</small></div>
+      ${own && t.owner !== S.user.id ? `<button class="btn sm ghost danger" data-kick="${t.id}">Çıkar</button>` : ''}</div>`).join('')}</div>
+    ${Number(s.bots || 0) > 0 ? `<p class="muted small">+ ${Math.min(Number(s.bots), s.max_teams - S.teams.length)} yapay zeka takımı başlarken eklenecek 🤖</p>` : ''}
   </section>
   <section class="card">
     <h2>Ayarlar ${own ? '' : '<small class="muted">(sadece oda sahibi değiştirebilir)</small>'}</h2>
@@ -359,6 +391,22 @@ function renderLobby() {
         <label>Başlangıç bütçesi<select name="start_budget" ${dis}>${[25e6, 50e6, 75e6, 100e6, 150e6, 200e6, 300e6].map((v) => `<option value="${v}" ${s.start_budget == v ? 'selected' : ''}>${money(v)}</option>`).join('')}</select></label>
         <label>Açık artırma süresi<select name="bid_minutes" ${dis}>${[2, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${s.bid_minutes == v ? 'selected' : ''}>${v} dk</option>`).join('')}</select></label>
       </div>
+      <div class="row2">
+        <label>Yapay zeka takımı<input type="number" name="bots" min="0" max="19" value="${s.bots ?? 0}" ${dis}></label>
+        <label>Transfer dönemi<select name="transfer_window" ${dis}><option value="always" ${s.transfer_window !== 'breaks' ? 'selected' : ''}>Her zaman açık</option><option value="breaks" ${s.transfer_window === 'breaks' ? 'selected' : ''}>Sezon başı + devre arası</option></select></label>
+      </div>
+      <fieldset><legend>Maç programı</legend>
+        <div class="row2">
+          <label>Mod<select name="schedule" ${dis}><option value="auto" ${s.schedule !== 'manual' ? 'selected' : ''}>Saatinde otomatik</option><option value="manual" ${s.schedule === 'manual' ? 'selected' : ''}>Elle / herkes hazır olunca</option></select></label>
+          <label>İlk gün<select name="first_day" ${dis}><option value="today" ${s.first_day === 'today' ? 'selected' : ''}>Bugün</option><option value="tomorrow" ${s.first_day !== 'today' ? 'selected' : ''}>Yarın</option></select></label>
+        </div>
+        <div class="row2">
+          <label>İlk maç saati<input type="time" name="kickoff" value="${esc(s.kickoff || '11:00')}" ${dis}></label>
+          <label>Maç arası<select name="gap_min" ${dis}>${[10, 15, 20, 30, 60].map((v) => `<option value="${v}" ${Number(s.gap_min ?? 10) === v ? 'selected' : ''}>${v} dk</option>`).join('')}</select></label>
+        </div>
+        <p class="muted small">Otomatik modda her gün bir hafta oynanır; her maçın kendi saati vardır (ör. 11:00, 11:10, 11:20…). Online olan canlı izler, sonradan da izlenebilir.</p>
+      </fieldset>
+      <label class="chk"><input type="checkbox" name="ai_offers" ${s.ai_offers !== false ? 'checked' : ''} ${dis}> Yapay zeka kulüpleri oyuncularıma teklif yapabilir</label>
       <fieldset><legend>Başlangıç kadrosu (kademe başına oyuncu) · toplam <b id="sqTotal">${sqTotal}</b></legend>
         <div class="tiers">${[['S', '85+'], ['A', '80-84'], ['B', '75-79'], ['C', '70-74'], ['D', '60-69']].map(([k, r]) =>
           `<label><span class="ovr r-${k.toLowerCase()}">${k}</span><small>${r}</small><input type="number" name="sq_${k}" min="0" max="12" value="${sq[k] ?? 0}" ${dis}></label>`).join('')}</div>
@@ -371,8 +419,8 @@ function renderLobby() {
     </form>
   </section>
   <section class="card">
-    ${own ? `<button class="btn primary big" id="btnStart" ${S.teams.length < 2 ? 'disabled' : ''}>Sezonu başlat</button>
-      <p class="muted small center">${S.teams.length < 2 ? 'En az 2 takım gerekli.' : 'Başlayınca kadrolar dağıtılır ve fikstür çekilir; yeni takım katılamaz.'}</p>
+    ${own ? `<button class="btn primary big" id="btnStart" ${S.teams.length + Number(s.bots || 0) < 2 ? 'disabled' : ''}>Sezonu başlat</button>
+      <p class="muted small center">${S.teams.length + Number(s.bots || 0) < 2 ? 'En az 2 takım gerekli — tek başınaysan yapay zeka takımı ekle.' : 'Başlayınca kadrolar dağıtılır ve fikstür çekilir; yeni takım katılamaz.'}</p>
       <button class="btn danger ghost" id="btnDel">Odayı sil</button>`
     : `<p class="muted center">Oda sahibinin sezonu başlatması bekleniyor…</p><button class="btn danger ghost" id="btnLeave">Odadan ayrıl</button>`}
   </section>`;
@@ -391,7 +439,8 @@ function renderLobby() {
     $('#btnStart').onclick = async () => {
       const ns = settingsFromForm(form);
       if (!ns) return;
-      if (!(await confirmBox(`${S.teams.length} takımla sezon başlasın mı?`, 'Başlat'))) return;
+      const total = Math.min(ns.max_teams, S.teams.length + ns.bots);
+      if (!(await confirmBox(`${total} takımla sezon başlasın mı?${ns.bots ? ` (${total - S.teams.length} yapay zeka)` : ''}`, 'Başlat'))) return;
       try {
         await rpc('update_settings', { p_game: S.gameId, p_settings: ns });
         await rpc('start_game', { p_game: S.gameId });
@@ -399,6 +448,10 @@ function renderLobby() {
         await reload(); renderGame();
       } catch (err) { toast(errText(err), 'err'); }
     };
+    $$('[data-kick]').forEach((b) => (b.onclick = async () => {
+      if (!(await confirmBox(`${tname(b.dataset.kick)} odadan çıkarılsın mı?`, 'Çıkar'))) return;
+      await act('kick_team', { p_game: S.gameId, p_team: b.dataset.kick }); renderGame();
+    }));
     $('#btnDel').onclick = async () => {
       if (!(await confirmBox('Oda ve içindeki her şey silinsin mi?', 'Sil'))) return;
       try { await rpc('delete_game', { p_game: S.gameId }); go(''); } catch (err) { toast(errText(err), 'err'); }
@@ -419,9 +472,14 @@ function settingsFromForm(form) {
   if (!leagues.length) { toast('En az bir lig seç', 'err'); return null; }
   const mt = Number(form.max_teams.value);
   if (mt < Math.max(2, S.teams.length) || mt > 20) { toast(`Takım sınırı ${Math.max(2, S.teams.length)}-20 olmalı`, 'err'); return null; }
+  const bots = Math.max(0, Math.min(19, Number(form.bots.value) || 0));
+  if (!/^\d{2}:\d{2}$/.test(form.kickoff.value)) { toast('İlk maç saatini seç', 'err'); return null; }
   return {
     format: form.format.value, legs: Number(form.legs.value), cup_legs: Number(form.cup_legs.value), max_teams: mt,
     start_budget: Number(form.start_budget.value), bid_minutes: Number(form.bid_minutes.value), squad, leagues,
+    bots, transfer_window: form.transfer_window.value, schedule: form.schedule.value, first_day: form.first_day.value,
+    kickoff: form.kickoff.value, gap_min: Number(form.gap_min.value), ai_offers: form.ai_offers.checked,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Istanbul',
   };
 }
 
@@ -433,46 +491,79 @@ function myFixtures() {
 function fxRow(f, { showRound } = {}) {
   const h = S.teamById.get(f.home), a = S.teamById.get(f.away);
   const mine = f.home === me()?.id || f.away === me()?.id;
-  const score = f.played ? `<b class="score">${f.hg} - ${f.ag}</b>` : `<span class="score muted">-</span>`;
-  const tag = f.comp === 'cup' ? `<span class="tag cup">Kupa ${f.cup_round}.tur${f.leg === 2 ? ' rövanş' : ''}</span>` : '';
-  return `<${f.played ? `a href="#/oda/${S.gameId}/mac/${f.id}"` : 'div'} class="fx ${mine ? 'mine' : ''}">
-    ${showRound ? `<small class="rnd">${f.round}.h</small>` : ''}
+  const st = liveState(f);
+  const link = st === 'live' || f.played;
+  const score = st === 'live' ? `<b class="score live">CANLI</b>`
+    : f.played ? `<b class="score">${f.hg} - ${f.ag}</b>`
+    : `<span class="score muted">${f.kickoff_at ? kickTime(f.kickoff_at) : '-'}</span>`;
+  const tag = f.comp === 'cup' ? `<span class="tag cup">Kupa ${f.cup_round}.tur${f.leg === 2 ? ' rövanş' : ''}</span>`
+    : f.comp === 'friendly' ? '<span class="tag">Hazırlık</span>' : '';
+  return `<${link ? `a href="#/oda/${S.gameId}/mac/${f.id}"` : 'div'} class="fx ${mine ? 'mine' : ''} ${st === 'live' ? 'is-live' : ''}">
+    ${showRound && f.comp !== 'friendly' ? `<small class="rnd">${f.round}.h${f.kickoff_at && !f.played ? ' ' + new Date(f.kickoff_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : ''}</small>` : ''}
     <span class="tm r">${esc(h?.name)} ${teamDot(h)}</span>${score}<span class="tm">${teamDot(a)} ${esc(a?.name)}</span>
-    ${tag}${f.pens ? `<small class="pens">pen. ${esc(f.pens)}</small>` : ''}${f.played ? '<span class="watch">▶</span>' : ''}
-  </${f.played ? 'a' : 'div'}>`;
+    ${tag}${f.pens && st !== 'live' ? `<small class="pens">pen. ${esc(f.pens)}</small>` : ''}${link ? `<span class="watch">${st === 'live' ? '🔴' : '▶'}</span>` : ''}
+  </${link ? 'a' : 'div'}>`;
 }
 function newsItem(n) {
-  const ic = { transfer: '🔁', auction: '🔨', outbid: '⚠️', offer: '💌', rival: '⚔️', champion: '🏆', round: '📅', cup: '🏆', start: '🚀', join: '👋' }[n.kind] || '📰';
+  const ic = { transfer: '🔁', auction: '🔨', outbid: '⚠️', offer: '💌', rival: '⚔️', champion: '🏆', round: '📅', cup: '🏆', start: '🚀', join: '👋', info: 'ℹ️' }[n.kind] || '📰';
   return `<div class="news ${n.team_id ? 'priv' : ''}"><span>${ic}</span><div>${esc(n.text)}<small>${ago(n.created_at)}</small></div></div>`;
 }
 function renderOzet() {
   const t = me();
   const nextR = S.fixtures.find((f) => !f.played)?.round;
   const mine = myFixtures();
-  const next = mine.filter((f) => !f.played).slice(0, 3);
-  const last = mine.filter((f) => f.played).slice(-3).reverse();
+  const live = [...S.fixtures, ...S.friendlies].filter((f) => liveState(f) === 'live');
+  const next = mine.filter((f) => !f.played && liveState(f) === 'wait').slice(0, 3);
+  const last = mine.filter((f) => f.played && liveState(f) === 'done').slice(-3).reverse();
   const roundFx = nextR ? S.fixtures.filter((f) => f.round === nextR) : [];
   const sq = [...S.own.values()].filter((x) => x.team_id === t?.id);
   const lineupOvr = t?.lineup?.length ? Math.round(t.lineup.reduce((a, id) => a + (S.players.get(id)?.ovr || 0), 0) / t.lineup.length) : 0;
-  const lastPlayed = S.fixtures.filter((f) => f.played && f.round === S.game.current_round);
+  const lastPlayed = S.fixtures.filter((f) => f.round === S.game.current_round && liveState(f) === 'done');
+  const humans = S.teams.filter((x) => !x.is_bot);
+  const readyN = humans.filter((x) => x.ready_round === nextR).length;
+  const amReady = t?.ready_round === nextR;
+  const active = S.game.status === 'active';
+  const firstKick = roundFx.map((f) => f.kickoff_at).filter(Boolean).sort()[0];
+  const opps = S.teams.filter((x) => x.id !== t?.id);
+  const myFriendly = S.friendlies.filter((f) => f.home === t?.id || f.away === t?.id).slice(0, 3);
   view().innerHTML = `
   ${S.game.status === 'finished' ? `<section class="card champ">🏆 Sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''}</section>` : ''}
+  ${live.length ? `<section class="card live-card"><h2>🔴 Şu an canlı</h2>${live.map((f) => fxRow(f)).join('')}</section>` : ''}
   <section class="card stats4">
     <div><small>Bütçe</small><b>${money(t?.budget)}</b></div>
     <div><small>Kadro</small><b>${sq.length}</b></div>
     <div><small>İlk 11 gücü</small><b>${lineupOvr || '-'}</b></div>
     <div><small>Sıra</small><b>${hasLeague() ? (S.standings.findIndex((x) => x.team_id === t?.id) + 1 || '-') + '.' : '-'}</b></div>
   </section>
-  ${isOwner() && S.game.status === 'active' ? `
+  ${active && nextR ? `
   <section class="card">
-    <button class="btn primary big" id="btnNext">▶ ${nextR}. haftayı oynat</button>
-    <p class="muted small center">${roundFx.length} maç oynanacak. Oynatmadan önce herkesin taktiğini ayarladığından emin ol.</p>
-  </section>` : S.game.status === 'active' ? `<p class="muted center small">Haftayı oda sahibi oynatır.</p>` : ''}
+    <h2>${nextR}. hafta</h2>
+    ${isAuto() && firstKick ? `<p>⏰ Maçlar <b>${kickTxt(firstKick)}</b>'da başlıyor, ${setting('gap_min', 10)} dk arayla. Taktiğin maç saatinde kilitlenir.</p>
+      <div class="list">${roundFx.map((f) => fxRow(f)).join('')}</div>` : ''}
+    ${!isAuto() ? `<p class="muted small">Hazır olanlar: <b>${readyN}/${humans.length}</b> ${humans.map((x) => `<span class="tag ${x.ready_round === nextR ? 'on' : ''}">${esc(x.short)}</span>`).join(' ')}</p>
+      <button class="btn ${amReady ? '' : 'primary'} big" id="btnReady">${amReady ? '✓ Hazırsın (geri al)' : 'Hazırım'}</button>
+      <p class="muted small center">Herkes hazır olunca hafta kendiliğinden oynanır.</p>` : ''}
+    ${isOwner() ? `<button class="btn ${isAuto() ? 'ghost' : ''}" id="btnNext">▶ ${nextR}. haftayı ${isAuto() ? 'şimdi ' : ''}oynat (${roundFx.length} maç)</button>` : ''}
+  </section>` : ''}
+  ${!windowOpen() && active ? `<p class="muted small center">🔒 Transfer dönemi kapalı. Sezon başında ve devre arasında açılır.</p>` : ''}
   ${lastPlayed.length ? `<section class="card"><h2>${S.game.current_round}. hafta sonuçları</h2>${lastPlayed.map((f) => fxRow(f)).join('')}</section>` : ''}
   ${next.length ? `<section class="card"><h2>Sıradaki maçların</h2>${next.map((f) => fxRow(f, { showRound: true })).join('')}</section>` : ''}
   ${last.length ? `<section class="card"><h2>Son maçların</h2>${last.map((f) => fxRow(f, { showRound: true })).join('')}</section>` : ''}
-  <section class="card"><h2>Haberler</h2><div id="newsList">${S.news.slice(0, 25).map(newsItem).join('') || '<p class="muted">Henüz haber yok</p>'}</div></section>`;
+  ${active ? `<section class="card"><h2>Hazırlık maçı</h2>
+    <p class="muted small">Hemen başlar, canlı izlersin. Puana ve bütçeye etkisi yok — taktik denemek için.</p>
+    <div class="row"><select id="frOpp" class="grow">${opps.map((x) => `<option value="${x.id}">${esc(x.name)}${x.is_bot ? ' 🤖' : ''}</option>`).join('')}</select>
+    <button class="btn primary" id="btnFriendly">Oyna</button></div>
+    ${myFriendly.length ? `<div class="list">${myFriendly.map((f) => fxRow(f)).join('')}</div>` : ''}
+  </section>` : ''}
+  <section class="card"><h2>Haberler</h2><div id="newsList">${S.news.slice(0, 25).map(newsItem).join('') || '<p class="muted">Henüz haber yok</p>'}</div></section>
+  ${S.game.status !== 'lobby' ? `<section class="card"><h2>Oda</h2>
+    ${isOwner() ? `
+      <label>Oda sahipliğini devret<div class="row"><select id="ownSel" class="grow">${humans.filter((x) => x.owner !== S.user.id).map((x) => `<option value="${x.id}">${esc(x.name)} (${esc(S.usernames.get(x.owner) || '')})</option>`).join('') || '<option value="">Başka menajer yok</option>'}</select><button class="btn" id="btnOwn">Devret</button></div></label>
+      <label>Takımı yapay zekaya devret (oyuncu bıraktıysa)<div class="row"><select id="kickSel" class="grow">${humans.filter((x) => x.owner !== S.user.id).map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('') || '<option value="">Başka menajer yok</option>'}</select><button class="btn danger" id="btnKick">Devret</button></div></label>`
+    : `<button class="btn danger ghost" id="btnLeave2">Odadan ayrıl (takımın yapay zekaya geçer)</button>`}
+  </section>` : ''}`;
   $('#btnNext') && ($('#btnNext').onclick = async (e) => {
+    if (isAuto() && !(await confirmBox('Maçlar saatini beklemeden şimdi oynansın mı?', 'Şimdi oynat'))) return;
     e.target.disabled = true;
     e.target.textContent = 'Maçlar oynanıyor…';
     try {
@@ -482,6 +573,30 @@ function renderOzet() {
       toast(`${r.round}. hafta oynandı (${r.played} maç)`, 'ok');
       if (myf) go(`oda/${S.gameId}/mac/${myf.id}`); else renderGame();
     } catch (err) { toast(errText(err), 'err'); renderGame(); }
+  });
+  $('#btnReady') && ($('#btnReady').onclick = async () => { await act('set_ready', { p_game: S.gameId, p_ready: !amReady }); renderGame(); });
+  $('#btnFriendly') && ($('#btnFriendly').onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      const r = await rpc('friendly_match', { p_game: S.gameId, p_opponent: $('#frOpp').value });
+      if (!r.ok) { toast(r.msg, 'err'); e.target.disabled = false; return; }
+      await reload();
+      go(`oda/${S.gameId}/mac/${r.fixture}`);
+    } catch (err) { toast(errText(err), 'err'); e.target.disabled = false; }
+  });
+  $('#btnOwn') && ($('#btnOwn').onclick = async () => {
+    const id = $('#ownSel').value; if (!id) return;
+    if (!(await confirmBox(`Oda sahipliği ${tname(id)} menajerine devredilsin mi? Geri alamazsın.`, 'Devret'))) return;
+    await act('transfer_ownership', { p_game: S.gameId, p_team: id }); renderGame();
+  });
+  $('#btnKick') && ($('#btnKick').onclick = async () => {
+    const id = $('#kickSel').value; if (!id) return;
+    if (!(await confirmBox(`${tname(id)} artık yapay zeka tarafından yönetilsin mi? Menajeri odadan çıkar.`, 'Devret'))) return;
+    await act('kick_team', { p_game: S.gameId, p_team: id }); renderGame();
+  });
+  $('#btnLeave2') && ($('#btnLeave2').onclick = async () => {
+    if (!(await confirmBox('Odadan ayrılırsan takımını yapay zeka yönetecek. Emin misin?', 'Ayrıl'))) return;
+    try { await rpc('leave_game', { p_game: S.gameId }); go(''); } catch (err) { toast(errText(err), 'err'); }
   });
 }
 
@@ -605,7 +720,7 @@ async function playerModal(pid) {
   const avail = Number(me()?.budget || 0) - reserved(pid);
   const minNext = auction ? Math.ceil((auction.amount * 1.05) / 100000) * 100000 : value;
   const owner = owned ? S.teamById.get(owned.team_id) : null;
-  const active = S.game.status === 'active';
+  const active = S.game.status === 'active' && windowOpen();
   modal(`
     <div class="phead">${ovrBadge(p.ovr)}<div><h2>${esc(p.name)}</h2><small>${esc(p.full_name || '')}</small></div></div>
     <div class="pinfo">
@@ -616,7 +731,7 @@ async function playerModal(pid) {
     ${attrBars(p)}
     ${auction ? `<div class="auction ${auction.bidder === me()?.id ? 'lead' : ''}">🔨 Açık artırma: <b>${money(auction.amount)}</b> · ${esc(tname(auction.bidder))} · <span data-exp="${auction.expires_at}">${timeLeft(auction.expires_at)}</span></div>` : ''}
     ${mine ? `
-      ${offers.filter((o) => o.seller === me().id).map((o) => `<div class="offer-in">💌 ${esc(tname(o.bidder))}: <b>${money(o.amount)}</b>
+      ${offers.filter((o) => o.seller === me().id).map((o) => `<div class="offer-in">💌 ${esc(bidderName(o))}: <b>${money(o.amount)}</b>
         <button class="btn sm primary" data-acc="${o.id}">Kabul</button><button class="btn sm ghost" data-rej="${o.id}">Ret</button></div>`).join('')}
       ${active ? `<button class="btn danger ghost" id="pSell">Yapay zekaya sat: ${money(Math.floor(value * (S.game.settings.ai_sell_ratio || 0.75)))}</button>` : ''}`
     : active ? `
@@ -628,10 +743,11 @@ async function playerModal(pid) {
           <button type="button" class="btn sm" data-q="${Math.ceil((minNext * 1.1) / 100000) * 100000}">+%10</button>
           <button type="button" class="btn sm" data-q="${Math.ceil((minNext * 1.25) / 100000) * 100000}">+%25</button>
         </div>
-        <p class="muted small" id="bidHint">${owner ? `Karar ${esc(owner.name)} menajerinde. Değerin altına teklif yapılamaz.` : auction ? 'Geçmek için en az %5 fazlası gerekir. Son dakikadaki teklif süreyi uzatır.' : `${esc(p.club)} istediği fiyatın altını kabul etmez; kabul ederse ${S.game.settings.bid_minutes} dk açık artırma başlar.`}</p>
+        <p class="muted small" id="bidHint">${owner?.is_bot ? `${esc(owner.name)} yapay zeka takımı; teklifi hemen kabul ya da reddeder.` : owner ? `Karar ${esc(owner.name)} menajerinde. Değerin altına teklif yapılamaz.` : auction ? 'Geçmek için en az %5 fazlası gerekir. Son dakikadaki teklif süreyi uzatır.' : `${esc(p.club)} istediği fiyatın altını kabul etmez; kabul ederse ${S.game.settings.bid_minutes} dk açık artırma başlar.`}</p>
         ${myOffer ? `<p class="small">Mevcut teklifin: <b>${money(myOffer.amount)}</b></p>` : ''}
         <button class="btn primary big" type="submit">Teklif ver</button>
       </form>` : ''}
+    ${S.game.status === 'active' && !windowOpen() ? '<p class="muted small center">🔒 Transfer dönemi kapalı</p>' : ''}
     <button class="btn ghost" data-close>Kapat</button>`, {
     onMount: (box, close) => {
       $$('[data-q]', box).forEach((b) => (b.onclick = () => (box.querySelector('[name=amt]').value = money(Number(b.dataset.q)).replace('€', ''))));
@@ -679,12 +795,13 @@ function renderPazar() {
         <label class="inl">En fazla<input name="price" placeholder="ör. 30M" value="${esc(m.price)}"></label>
       </div>
       <div class="row2">
-        <select name="owner"><option value="all" ${m.owner === 'all' ? 'selected' : ''}>Herkes</option><option value="ai" ${m.owner === 'ai' ? 'selected' : ''}>Yapay zeka kulüpleri</option><option value="managers" ${m.owner === 'managers' ? 'selected' : ''}>Menajerler</option><option value="auction" ${m.owner === 'auction' ? 'selected' : ''}>Açık artırmada</option></select>
+        <select name="owner"><option value="all" ${m.owner === 'all' ? 'selected' : ''}>Herkes</option><option value="ai" ${m.owner === 'ai' ? 'selected' : ''}>Yapay zeka kulüpleri</option><option value="managers" ${m.owner === 'managers' ? 'selected' : ''}>Diğer takımlar</option><option value="auction" ${m.owner === 'auction' ? 'selected' : ''}>Açık artırmada</option></select>
         <select name="sort"><option value="ovr" ${m.sort === 'ovr' ? 'selected' : ''}>Rating ↓</option><option value="val_asc" ${m.sort === 'val_asc' ? 'selected' : ''}>Fiyat ↑</option><option value="val" ${m.sort === 'val' ? 'selected' : ''}>Fiyat ↓</option><option value="age" ${m.sort === 'age' ? 'selected' : ''}>Yaş ↑</option><option value="pot" ${m.sort === 'pot' ? 'selected' : ''}>Potansiyel ↓</option></select>
       </div>
       <button class="btn primary" type="submit">Ara</button>
     </form>
   </section>
+  ${!windowOpen() ? '<p class="muted small center">🔒 Transfer dönemi kapalı — oyunculara bakabilirsin ama teklif veremezsin.</p>' : ''}
   <section class="card"><div id="mkList"></div></section>`;
   const form = $('#mkForm');
   form.onsubmit = (e) => { e.preventDefault(); readMk(form); searchMarket(true); };
@@ -751,7 +868,7 @@ function renderTeklif() {
   const pl = (o) => { const p = S.players.get(o.player_id); return p ? `${ovrBadge(p.ovr)} <b>${esc(p.name)}</b>` : `#${o.player_id}`; };
   view().innerHTML = `
   <section class="card"><h2>Gelen teklifler</h2>
-    ${incoming.length ? incoming.map((o) => `<div class="offer"><div class="grow">${pl(o)}<small>${esc(tname(o.bidder))} · ${esc(o.note || '')} · <span data-exp="${o.expires_at}">${timeLeft(o.expires_at)}</span></small></div>
+    ${incoming.length ? incoming.map((o) => `<div class="offer"><div class="grow">${pl(o)}<small>${esc(bidderName(o))} · ${esc(o.note || '')} · <span data-exp="${o.expires_at}">${timeLeft(o.expires_at)}</span></small></div>
       <b>${money(o.amount)}</b><div class="row"><button class="btn sm primary" data-acc="${o.id}">Kabul</button><button class="btn sm ghost" data-rej="${o.id}">Ret</button></div></div>`).join('') : '<p class="muted">Yok</p>'}
   </section>
   <section class="card"><h2>Açık artırmalar</h2>
@@ -763,7 +880,7 @@ function renderTeklif() {
       <b>${money(o.amount)}</b><button class="btn sm ghost" data-cancel="${o.id}">Geri çek</button></div>`).join('') : '<p class="muted">Yok</p>'}
   </section>
   <section class="card"><h2>Geçmiş</h2>
-    ${hist.length ? hist.map((o) => `<div class="offer hist"><div class="grow">${pl(o)}<small>${o.bidder === t.id ? (o.seller ? `→ ${esc(tname(o.seller))}` : 'Açık artırma') : `← ${esc(tname(o.bidder))}`} · ${esc(o.note || '')}</small></div>
+    ${hist.length ? hist.map((o) => `<div class="offer hist"><div class="grow">${pl(o)}<small>${o.bidder === t.id ? (o.seller ? `→ ${esc(tname(o.seller))}` : 'Açık artırma') : `← ${esc(bidderName(o))}`} · ${esc(o.note || '')}</small></div>
       <b>${money(o.amount)}</b><span class="tag st-${o.status}">${st[o.status] || o.status}</span></div>`).join('') : '<p class="muted">Yok</p>'}
   </section>`;
   $$('[data-acc]').forEach((b) => (b.onclick = async () => { await act('respond_offer', { p_offer: Number(b.dataset.acc), p_accept: true }); renderGame(); }));
@@ -785,7 +902,7 @@ function renderPuan() {
   const rows = S.standings;
   $('#lBody').innerHTML = `<section class="card"><table class="tbl">
     <thead><tr><th>#</th><th class="l">Takım</th><th>O</th><th class="hide-s">G</th><th class="hide-s">B</th><th class="hide-s">M</th><th class="hide-s">A</th><th class="hide-s">Y</th><th>AV</th><th>P</th></tr></thead>
-    <tbody>${rows.map((r, i) => `<tr class="${r.team_id === me()?.id ? 'mine' : ''}"><td>${i + 1}</td><td class="l">${teamDot(r)} ${esc(r.name)}</td><td>${r.o}</td>
+    <tbody>${rows.map((r, i) => `<tr class="${r.team_id === me()?.id ? 'mine' : ''}"><td>${i + 1}</td><td class="l">${teamDot(r)} ${esc(r.name)}${S.teamById.get(r.team_id)?.is_bot ? ' 🤖' : ''}</td><td>${r.o}</td>
       <td class="hide-s">${r.w}</td><td class="hide-s">${r.d}</td><td class="hide-s">${r.l}</td><td class="hide-s">${r.gf}</td><td class="hide-s">${r.ga}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody>
   </table></section>`;
 }
@@ -839,6 +956,7 @@ sb.auth.onAuthStateChange((ev, session) => {
     if (!S.user) { leaveGame(); go('giris'); } else route();
   });
 });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 (async () => {
   const { data } = await sb.auth.getSession();
   S.user = data.session?.user || null;
