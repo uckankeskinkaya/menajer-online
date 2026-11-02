@@ -48,15 +48,15 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 008_faz2 | ✅ kullanıcı SQL Editor'den: maç puanları (`stats.rt`, `motm`), kondisyon/form/gelişim (`squads.fitness/form/ovr_delta`), kart cezası/sakatlık (`ban`/`injury`/`yellows`), maç içi değişiklik, maaş/bilet/ödül, `new_season`, `player_stats`, `games.season/history` |
 | 011_kariyer | ✅ kullanıcı SQL Editor'den: `club_list`, `quick_match` (ana ekrandan gerçek kulüplerle hazırlık maçı, `settings.sandbox` gizli oda), `start_career` (gerçek lig + gerçek kulüp kariyeri, `settings.career`) |
 | 013_kulup_renkleri | ✅ `execute_sql`: büyük kulüplerin gerçek renkleri `_club_team` içinde |
-| 014_itibar | ⏳ 012'den sonra `execute_sql` ile uygulanacak: itibar lig içi sıraya göre (1.→5, 2-3.→4, 4.→3, ilk yarı→2, kalan→1) |
-| 012_finans | ⏳ kullanıcı uygulayacak. FM finansı: `squads.wage` (değerin %0.22'si/hafta, transferde yeniden), `teams.wage_budget/weekly_income/ticket/reputation/fin` (sezon defteri), `_setup_finances` (kariyerlerde kadro değerine göre), maaş bütçesi `place_bid`'de kontrol |
+| 014_itibar | ✅ `execute_sql`: 012'de atlanan hafta sonu maaş/sponsor bloğu +  itibar lig içi sıraya göre (1.→5, 2-3.→4, 4.→3, ilk yarı→2, kalan→1) |
+| 012_finans | ✅ kullanıcı SQL Editor'den (çok satırlı bir değiştirme kopyalamada bozulup atlandı, 014 tamamladı). FM finansı: `squads.wage` (değerin %0.22'si/hafta, transferde yeniden), `teams.wage_budget/weekly_income/ticket/reputation/fin` (sezon defteri), `_setup_finances` (kariyerlerde kadro değerine göre), maaş bütçesi `place_bid`'de kontrol |
 | 010_forma | ✅ kullanıcı SQL Editor'den uyguladı: `squads.shirt` (trigger ile otomatik), `teams.kit` (desen/arma/sembol), `set_kit` |
 | 009_dinlenme | ✅ `execute_sql`: günlük dinlenme +20, gol sabiti 0.29 → 540 maçta 2.55 gol/maç |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
 
-003-005 Supabase'in migration geçmişinde (`list_migrations`) görünmez; elle/`execute_sql` ile uygulandılar. Kaynak doğru olan bu dosyalardır. GitHub Raw sayfası birkaç dakika önbellekte tutar: değişen bir dosyayı kullanıcıya verme, yeni numaralı dosya aç.
+003-005 Supabase'in migration geçmişinde (`list_migrations`) görünmez; elle/`execute_sql` ile uygulandılar. Kaynak doğru olan bu dosyalardır. GitHub Raw sayfası birkaç dakika önbellekte tutar: değişen bir dosyayı kullanıcıya verme, yeni numaralı dosya aç. Telefondan kopyalamada çok satırlı metinlerdeki art arda boşluklar bozulabiliyor: kullanıcıya verilecek dosyada `replace` ile çok satırlı blok değiştirme yerine tek satırlık eşleşmeler ya da tam `create or replace` kullan; uyguladıktan sonra `pg_get_functiondef` ile doğrula.
 `execute_sql`'de `delete`, `revoke`, `create extension` gibi ifadeler onay ister (60 sn) ve kullanıcının cihazında bu pencere AÇILMIYOR: böyle SQL'i kullanıcıya SQL Editor'de çalıştırması için ver; `create or replace function` ve DO bloklarındaki testler onaysız geçer.
 Aynı istekte hem değişiklik hem `raise exception`'lı test gönderme: exception değişikliği de geri alır.
 

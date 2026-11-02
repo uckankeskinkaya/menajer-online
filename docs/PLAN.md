@@ -79,12 +79,13 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 4. Silme/yetki gerektiren SQL olursa sana SQL Editor'de çalıştırman için kısa bir komut veririm (Supabase onay penceresi cihazında açılmıyor).
 5. Bu dosya her oturum sonunda güncellenir.
 
-## Faz 4 — FM havası ve tek kişilik oyun 🟡
+## Faz 4 — FM havası ve tek kişilik oyun ✅
 
 | # | Madde | Durum |
 |---|---|---|
 | 4a | Maçta sadece önemli anlar, normal hızda (⏩ sonraki an) | ✅ |
-| 4b | Ana ekranda hızlı hazırlık maçı (iki gerçek kulüp) | 🟡 011 bekleniyor |
-| 4c | Tek kişilik kariyer: gerçek lig + gerçek kulüp ya da kurmaca takım | 🟡 gerçek kulüp 011 bekliyor, kurmaca hazır |
+| 4b | Ana ekranda hızlı hazırlık maçı (iki gerçek kulüp) | ✅ |
+| 4c | Tek kişilik kariyer: gerçek lig + gerçek kulüp ya da kurmaca takım | ✅ |
 | 4d | Yardımcı antrenör maç önü raporu, yönetim hedefi ve güveni, form | ✅ |
-| 4e | FM finansı: oyuncu maaşları, maaş bütçesi, sponsor/TV, bilet, itibar, sezon gelir-gider defteri (Kadro → Finans) | 🟡 011 bekleniyor |
+| 4e | FM finansı: oyuncu maaşları, maaş bütçesi, sponsor/TV, bilet, itibar, sezon gelir-gider defteri (Kadro → Finans) | ✅ |
+| 4f | Gerçek kulüp renkleri; yıldızlar lig içi sıra + Avrupa seviyesi | ✅ |
