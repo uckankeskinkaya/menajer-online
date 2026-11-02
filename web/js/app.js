@@ -49,9 +49,17 @@ function pv(id) {
   return { ...p, base: p.ovr, ovr: p.ovr + (sq?.ovr_delta || 0), age: p.age + (S.game?.season || 1) - 1, sq, st: S.pstats.get(id) };
 }
 const unavailable = (sq) => sq && (sq.injury > 0 || sq.ban > 0);
+const MORALE = (m) => (m >= 85 ? ['😃', 'Çok iyi'] : m >= 70 ? ['🙂', 'İyi'] : m >= 55 ? ['😐', 'Normal'] : m >= 40 ? ['😕', 'Kötü'] : ['😠', 'Çok kötü']);
+const moraleIcon = (sq) => (sq && sq.morale !== undefined ? `<span class="mo" title="Moral: ${MORALE(sq.morale)[1]} (${sq.morale})">${MORALE(sq.morale)[0]}</span>` : '');
+const contractTxt = (c) => (c <= 0 ? 'bu sezon bitiyor' : `${c} yıl daha`);
+// sözleşme uzatma maliyeti (sunucudaki renew_contract ile aynı hesap)
+function renewCost(sq, years) {
+  const nw = Math.round((Math.max(Number(sq.wage || 0), wageOf(Number(sq.value))) * (1.08 + 0.03 * years) * (sq.morale < 55 ? 1.1 : 1)) / 1000) * 1000;
+  return { nw, bonus: nw * 6 };
+}
 function statusBadges(sq) {
   if (!sq) return '';
-  return `${sq.injury > 0 ? `<span class="tag bad" title="Sakat">🚑 ${sq.injury}h</span>` : ''}${sq.ban > 0 ? `<span class="tag bad" title="Cezalı">🟥 ${sq.ban}m</span>` : ''}${sq.yellows >= 4 ? '<span class="tag warn" title="Bir sarı daha cezalı">🟨4</span>' : ''}`;
+  return `${sq.injury > 0 ? `<span class="tag bad" title="Sakat">🚑 ${sq.injury}h</span>` : ''}${sq.ban > 0 ? `<span class="tag bad" title="Cezalı">🟥 ${sq.ban}m</span>` : ''}${sq.yellows >= 4 ? '<span class="tag warn" title="Bir sarı daha cezalı">🟨4</span>' : ''}${sq.contract !== undefined && sq.contract <= 0 ? '<span class="tag warn" title="Sözleşmesi bu sezon bitiyor">📝</span>' : ''}`;
 }
 const fitBar = (f) => `<span class="fit" title="Kondisyon %${f}"><i style="width:${f}%" class="${f >= 80 ? 'hi' : f >= 60 ? 'mid' : 'lo'}"></i></span>`;
 const bidderName = (o) => (o.bidder ? tname(o.bidder) : `🤖 ${o.ai_club || 'Yapay zeka kulübü'}`);
@@ -698,6 +706,8 @@ function assistantReport(f) {
     inj || ban ? `Kadromuzda ${inj ? `${inj} sakat` : ''}${inj && ban ? ', ' : ''}${ban ? `${ban} cezalı` : ''} oyuncu var.` : 'Sakat ya da cezalı oyuncumuz yok.',
     badIn11 ? `<span class="warn">⚠️ İlk 11'de oynayamayacak ${badIn11} oyuncu var, taktiği güncelle.</span>` : '',
     tired ? `İlk 11'de ${tired} oyuncunun kondisyonu %70'in altında; rotasyon düşün.` : '',
+    (() => { const ex = mine.filter((x) => x.contract !== undefined && x.contract <= 0).length, sad = mine.filter((x) => x.morale !== undefined && x.morale < 45).length;
+      return [ex ? `${ex} oyuncunun sözleşmesi bu sezon bitiyor; uzatmazsan sezon sonunda bedelsiz gider.` : '', sad ? `${sad} oyuncunun morali bozuk 😕 (forma şansı ve sonuçlar etkiliyor).` : ''].filter(Boolean).join(' '); })(),
     `<i>${advice}</i>`,
   ].filter(Boolean);
   return `<div class="assist"><div class="as-head"><span class="as-av">🧑‍💼</span><div><b>Yardımcı antrenör</b><small>Maç önü raporu</small></div></div><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></div>`;
@@ -759,6 +769,25 @@ function newsItem(n) {
   const ic = { transfer: '🔁', auction: '🔨', outbid: '⚠️', offer: '💌', rival: '⚔️', champion: '🏆', round: '📅', cup: '🏆', start: '🚀', join: '👋', info: 'ℹ️' }[n.kind] || '📰';
   return `<div class="news ${n.team_id ? 'priv' : ''}"><span>${ic}</span><div>${esc(n.text)}<small>${ago(n.created_at)}</small></div></div>`;
 }
+// maç sonu basın toplantısı: son resmi maç için bir kez (sunucudaki answer_press ile aynı sorular/cevaplar)
+const PRESS = {
+  w: ['Galibiyet sonrası duyguların neler?', ['Oyuncularımla gurur duyuyorum.', 'Ayaklarımız yere basmalı, daha yolun başındayız.', 'Kazandık ama oyundan memnun değilim.']],
+  d: ['Beraberlik hakkında ne söylersin?', ['Bir puan da değerli, oyuncularım mücadele etti.', 'İki puan kaybettik, bunu kabul edemem.', 'Hakem kararları sonucu etkiledi.']],
+  l: ['Bu yenilgiyi nasıl değerlendiriyorsun?', ['Sorumluluk tamamen bende.', 'Oyuncularım beni hayal kırıklığına uğrattı.', 'Bu yenilgiden ders çıkaracağız, kafalar dik.']],
+};
+function pressCard(t, mine) {
+  if (!t || !('press_fx' in t)) return '';
+  const done = mine.filter((f) => f.played && liveState(f) === 'done')
+    .sort((a, b) => String(b.kickoff_at || '').localeCompare(String(a.kickoff_at || '')) || b.round - a.round || b.id - a.id)[0];
+  if (!done || t.press_fx === done.id) return '';
+  const gf = done.home === t.id ? done.hg : done.ag, ga = done.home === t.id ? done.ag : done.hg;
+  const [q, opts] = PRESS[gf > ga ? 'w' : gf === ga ? 'd' : 'l'];
+  return `<section class="card press"><h2>🎙️ Basın toplantısı</h2>
+    <p class="small muted">${esc(tname(done.home))} ${done.hg} - ${done.ag} ${esc(tname(done.away))}</p>
+    <p><b>${q}</b></p>
+    <div class="col">${opts.map((o, i) => `<button class="btn" data-press="${i}">“${esc(o)}”</button>`).join('')}</div>
+    <p class="small muted">Cevabın kadronun moralini etkiler; sözlerin haberlere düşer.</p></section>`;
+}
 function renderOzet() {
   const t = me();
   const nextR = S.fixtures.find((f) => !f.played)?.round;
@@ -780,6 +809,7 @@ function renderOzet() {
   view().innerHTML = `
   ${S.game.status === 'finished' ? `<section class="card champ">🏆 ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''}
     ${isOwner() ? `<button class="btn primary big" id="btnSeason" style="margin-top:10px">▶ ${(S.game.season || 1) + 1}. sezonu başlat</button><p class="small">Oyuncular bir yaş büyür; gençler gelişir, yaşlılar düşer, bazıları emekli olur. Kadrolar ve bütçeler kalır.</p>` : '<p class="small">Yeni sezonu oda sahibi başlatır.</p>'}</section>` : ''}
+  ${pressCard(t, mine)}
   ${live.length ? `<section class="card live-card"><h2>🔴 Şu an canlı</h2>${live.map((f) => fxRow(f)).join('')}</section>` : ''}
   <section class="card hero">
     <div class="hero-kit">${shirtSVG(t, { num: '', size: 64 })}${crestSVG(t, 54)}</div>
@@ -854,6 +884,11 @@ function renderOzet() {
     } catch (err) { toast(errText(err), 'err'); renderGame(); }
   });
   $('#btnKit') && ($('#btnKit').onclick = kitEditor);
+  $$('[data-press]').forEach((b) => (b.onclick = async () => {
+    $$('[data-press]').forEach((x) => (x.disabled = true));
+    const r = await act('answer_press', { p_game: S.gameId, p_choice: Number(b.dataset.press) }, { quiet: true });
+    if (!r?.ok) $$('[data-press]').forEach((x) => (x.disabled = false)); else renderGame();
+  }));
   $('#btnSeason') && ($('#btnSeason').onclick = async () => {
     if (!(await confirmBox(`${(S.game.season || 1) + 1}. sezon başlasın mı?`, 'Başlat'))) return;
     await act('new_season', { p_game: S.gameId }); renderGame();
@@ -923,7 +958,7 @@ function renderFinans() {
   const ticket = Number(t.ticket || setting('ticket_income', 1000000));
   const rows = (arr) => arr.map(([k, l, sign]) => `<div class="frow"><span>${l}</span><b class="${sign > 0 ? 'pos' : 'neg'}">${sign > 0 ? '+' : '−'}${money(fin[k] || 0)}</b></div>`).join('');
   const inn = ['bilet', 'sponsor', 'odul', 'satis'].reduce((a, k) => a + Number(fin[k] || 0), 0);
-  const out = ['maas', 'transfer'].reduce((a, k) => a + Number(fin[k] || 0), 0);
+  const out = ['maas', 'transfer', 'imza'].reduce((a, k) => a + Number(fin[k] || 0), 0);
   const sq = [...S.own.values()].filter((x) => x.team_id === t.id).map((x) => pv(x.player_id)).sort((a, b) => (b.sq.wage || 0) - (a.sq.wage || 0));
   $('#kBody').innerHTML = `
   <section class="card finhero">
@@ -947,7 +982,7 @@ function renderFinans() {
   <section class="card">
     <h2>Bu sezon</h2>
     <h3>Gelir</h3>${rows([['bilet', 'Bilet', 1], ['sponsor', 'Sponsor ve yayın', 1], ['odul', 'Maç ve sezon ödülleri', 1], ['satis', 'Oyuncu satışları', 1]])}
-    <h3>Gider</h3>${rows([['maas', 'Maaşlar', -1], ['transfer', 'Transferler', -1]])}
+    <h3>Gider</h3>${rows([['maas', 'Maaşlar', -1], ['transfer', 'Transferler', -1], ['imza', 'İmza paraları', -1]])}
     <div class="frow total"><span>Net</span><b class="${inn - out >= 0 ? 'pos' : 'neg'}">${inn - out >= 0 ? '+' : '−'}${money(Math.abs(inn - out))}</b></div>
   </section>
   <section class="card"><h2>En yüksek maaşlar</h2><div class="list">${sq.slice(0, 8).map((p) => playerRow(p, `<span class="vw"><b>${money(p.sq.wage || wageOf(p.sq.value))}</b><small>/hafta</small></span>`, { mine: true })).join('')}</div></section>`;
@@ -957,7 +992,7 @@ function renderFinans() {
 function playerRow(p, side = '', { mine } = {}) {
   const d = p.ovr - (p.base ?? p.ovr);
   return `<div class="prow ${mine && unavailable(p.sq) ? 'unav' : ''}" data-pid="${p.id}">${mine && p.sq?.shirt ? `<span class="shno">${p.sq.shirt}</span>` : ''}${ovrBadge(p.ovr)}${d ? `<small class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</small>` : ''}${grpBadge(p.grp)}
-    <div class="pmain"><b>${esc(p.name)} ${mine ? statusBadges(p.sq) : ''}</b><small>${mine && p.sq ? `${fitBar(p.sq.fitness)} form ${Number(p.sq.form).toFixed(1)}${p.st ? ` · ${p.st.apps} maç ${p.st.goals} gol ${p.st.rating}` : ''}` : `${esc(p.positions)} · ${p.age} · ${esc(p.club)} (${esc(p.lg)})`}</small></div>
+    <div class="pmain"><b>${esc(p.name)} ${mine ? statusBadges(p.sq) : ''}</b><small>${mine && p.sq ? `${moraleIcon(p.sq)} ${fitBar(p.sq.fitness)} form ${Number(p.sq.form).toFixed(1)}${p.st ? ` · ${p.st.apps} maç ${p.st.goals} gol ${p.st.rating}` : ''}` : `${esc(p.positions)} · ${p.age} · ${esc(p.club)} (${esc(p.lg)})`}</small></div>
     <div class="pside">${side}</div></div>`;
 }
 function fcCard(p, owner) {
@@ -1113,7 +1148,12 @@ async function playerModal(pid) {
       <span>Değer: <b>${money(value)}</b>${owned?.bought_for > 0 ? ` · alış ${money(owned.bought_for)}` : ''}</span>
       <span>Maaş: <b>${money(owned?.wage || wageOf(value))}</b>/hafta${owned ? '' : ' (talep)'}</span>
     </div>
-    ${owned ? `<div class="pinfo">${statusBadges(owned)}<span>Kondisyon ${fitBar(owned.fitness)} %${owned.fitness}</span><span>Form <b>${Number(owned.form).toFixed(1)}</b></span>${owned.yellows ? `<span>🟨 ${owned.yellows}</span>` : ''}</div>` : ''}
+    ${owned ? `<div class="pinfo">${statusBadges(owned)}<span>Kondisyon ${fitBar(owned.fitness)} %${owned.fitness}</span><span>Form <b>${Number(owned.form).toFixed(1)}</b></span>${owned.yellows ? `<span>🟨 ${owned.yellows}</span>` : ''}
+      ${owned.morale !== undefined ? `<span>Moral ${MORALE(owned.morale)[0]} <b>${MORALE(owned.morale)[1]}</b></span>` : ''}${owned.contract !== undefined ? `<span>Sözleşme: <b>${contractTxt(owned.contract)}</b></span>` : ''}</div>` : ''}
+    ${mine && owned.contract !== undefined && S.game.status !== 'lobby' ? `<div class="renew">
+      <label>Sözleşme uzat <select id="rnY">${[1, 2, 3, 4].map((y) => `<option value="${y}">${y} yıl</option>`).join('')}</select></label>
+      <small class="muted" id="rnCost"></small>
+      <button class="btn sm primary" id="rnGo" type="button">Uzat</button></div>` : ''}
     ${st ? `<div class="pstat"><div><b>${st.apps}</b><small>Maç</small></div><div><b>${st.goals}</b><small>Gol</small></div><div><b>${st.assists}</b><small>Asist</small></div><div><b>${st.rating}</b><small>Ort. puan</small></div><div><b>${st.motm}</b><small>Maçın adamı</small></div></div>` : ''}
     ${auction ? `<div class="auction ${auction.bidder === me()?.id ? 'lead' : ''}">🔨 Açık artırma: <b>${money(auction.amount)}</b> · ${esc(tname(auction.bidder))} · <span data-exp="${auction.expires_at}">${timeLeft(auction.expires_at)}</span></div>` : ''}
     ${mine ? `
@@ -1137,6 +1177,12 @@ async function playerModal(pid) {
     ${S.game.status === 'active' && !windowOpen() ? '<p class="muted small center">🔒 Transfer dönemi kapalı</p>' : ''}
     <button class="btn ghost" data-close>Kapat</button>`, {
     onMount: (box, close) => {
+      const rnY = box.querySelector('#rnY');
+      if (rnY) {
+        const upd = () => { const c = renewCost(owned, Number(rnY.value)); box.querySelector('#rnCost').textContent = `Yeni maaş ${money(c.nw)}/hafta · imza parası ${money(c.bonus)}${owned.morale < 35 ? ' · morali düşük, reddedebilir' : ''}`; };
+        rnY.onchange = upd; upd();
+        box.querySelector('#rnGo').onclick = async () => { const r = await act('renew_contract', { p_game: S.gameId, p_player: pid, p_years: Number(rnY.value) }, { quiet: true }); if (r?.ok) close(); };
+      }
       $$('[data-q]', box).forEach((b) => (b.onclick = () => (box.querySelector('[name=amt]').value = money(Number(b.dataset.q)).replace('€', ''))));
       const form = box.querySelector('#bidForm');
       if (form) form.onsubmit = async (e) => {

@@ -57,6 +57,8 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 017_talimatlar | ✅ kullanıcı SQL Editor'den (girintiler bozuldu, `set_instr` `execute_sql` ile dosyadaki haliyle yeniden yazıldı): `teams.instr` (pres/tempo/genişlik 0-2), `set_instr` RPC, `offers_player_id_idx` |
 | 018_talimat_etkisi | ✅ `execute_sql`: `_power` talimatları okur (`to_jsonb(t)->'instr'`, kolon yoksa normal), pres +%35 kart / +4 yorgunluk; karışık talimatlarla ~2.6 gol/maç |
 | 019_yz_tarz | ✅ `execute_sql`: YZ takımlarına kimlikten türetilen kalıcı tarz (`_power`; istemcide `teamStyle` aynı hesap) |
+| 020_moral_sozlesme | ⏳ kullanıcı SQL Editor'den çalıştıracak: `squads.morale` (0-100), `squads.contract` (kalan yıl, 0 = sezon sonu biter), `teams.press_fx`, `answer_press`, `renew_contract` |
+| 021_moral_etkisi | ⏳ 020'den SONRA `execute_sql`: `_power` moral ±%4.5, `_sim_fixture` maç sonu moral, `new_season` sözleşme bitişi (bedelsiz ayrılık) + altyapıdan 2 genç |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
@@ -73,7 +75,7 @@ Yol haritası: `docs/PLAN.md` (fazlar ve maddeler; her oturum sonunda güncelle)
 ## Veri modeli (özet)
 
 `real_players` · `profiles` · `games` (code, owner, status lobby/active/finished, settings, current_round, cup) ·
-`teams` (budget, formation, mentality -2..2, lineup int[11], instr {press,tempo,width} 0..2) · `squads` (satır yoksa oyuncu yapay zeka kulübünde) ·
+`teams` (budget, formation, mentality -2..2, lineup int[11], instr {press,tempo,width} 0..2) · `squads` (satır yoksa oyuncu yapay zeka kulübünde; morale, contract) ·
 `offers` (seller null = yapay zeka açık artırması; bidder null + `ai_club` = YZ kulübünün menajere teklifi) · `fixtures` (comp league/cup, round, cup_round, leg, tie, hg, ag, pens, winner, events, stats) ·
 `news` (team_id null = herkese). Realtime: games, offers, news, fixtures, teams, squads.
 
