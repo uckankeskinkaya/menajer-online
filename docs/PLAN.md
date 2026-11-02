@@ -33,18 +33,18 @@ Arkadaş grubunda oyunun akıcı dönmesi için gerekenler.
 | 1.7 | ✅ **Oda sahibini devretme / oyuncuyu odadan çıkarma** (lobide) | Gruptan biri bırakırsa oda tıkanmasın | S + İ |
 | 1.8 | **Şifremi unuttum** | Unutan kalırsa hesaba dönebilsin | İ + **K**: Supabase'e kendi SMTP'n (ör. Gmail uygulama şifresi / Resend) — ücretsiz SMTP saatte 2 e-posta |
 
-## Faz 2 — Oyun derinliği (2-4 oturum)
+## Faz 2 — Oyun derinliği ✅ (2 Kasım 2026)
 
 | # | Madde | Ayrıntı | Tür |
 |---|---|---|---|
-| 2.1 | **Maç puanları ve istatistik** | Her oyuncuya maç notu (6.0-10), gol krallığı, asist, en iyi 11, sezonun oyuncusu | S + İ |
-| 2.2 | **Form ve değer değişimi** | İyi oynayanın değeri artar, kötü oynayanınki düşer; formdaki oyuncu maçta biraz daha güçlü | S |
-| 2.3 | **Kartlar ve sakatlıklar** | Kırmızı kart, 5 sarıda ceza, maç içinde sakatlık (1-4 hafta); cezalı/sakat oyuncu ilk 11'e konamaz | S + İ |
-| 2.4 | **Yorgunluk / rotasyon** | Arka arkaya oynayan yorulur (özellikle lig + kupa haftalarında); yedekler anlam kazanır | S + İ |
-| 2.5 | **Maç içi değişiklik kuralları** | Sunucu simülasyonunda 60-75. dk otomatik oyuncu değişikliği (yorgun/kart görmüş) — taktikte "değişiklik planı" | S + İ |
-| 2.6 | **Gelir/gider dengesi** | Maaşlar (değerin %x'i), bilet geliri, sezon sonu sıralama ödülü; böylece "çok oyuncu topla" stratejisi pahalı olur | S |
-| 2.7 | **Yeni sezon** | Sezon bitince aynı odada yeni sezon: yaş +1, genç oyuncular potansiyele doğru gelişir, yaşlılar düşer; emeklilik; kupa/lig şampiyonları geçmişte saklanır | S + İ |
-| 2.8 | **Sezon geçmişi / kupa dolabı** | Odanın şampiyonlar listesi, menajer profili (kaç kupa) | S + İ |
+| 2.1 | ✅ **Maç puanları ve istatistik** | Her oyuncuya maç notu (6.0-10), gol krallığı, asist, en iyi 11, sezonun oyuncusu | S + İ |
+| 2.2 | ✅ **Form ve değer değişimi** | İyi oynayanın değeri artar, kötü oynayanınki düşer; formdaki oyuncu maçta biraz daha güçlü | S |
+| 2.3 | ✅ **Kartlar ve sakatlıklar** | Kırmızı kart, 5 sarıda ceza, maç içinde sakatlık (1-4 hafta); cezalı/sakat oyuncu ilk 11'e konamaz | S + İ |
+| 2.4 | ✅ **Yorgunluk / rotasyon** | Arka arkaya oynayan yorulur (özellikle lig + kupa haftalarında); yedekler anlam kazanır | S + İ |
+| 2.5 | ✅ **Maç içi değişiklik kuralları** | Sunucu simülasyonunda 60-75. dk otomatik oyuncu değişikliği (yorgun/kart görmüş) — taktikte "değişiklik planı" | S + İ |
+| 2.6 | ✅ **Gelir/gider dengesi** | Maaşlar (değerin %x'i), bilet geliri, sezon sonu sıralama ödülü; böylece "çok oyuncu topla" stratejisi pahalı olur | S |
+| 2.7 | ✅ **Yeni sezon** | Sezon bitince aynı odada yeni sezon: yaş +1, genç oyuncular potansiyele doğru gelişir, yaşlılar düşer; emeklilik; kupa/lig şampiyonları geçmişte saklanır | S + İ |
+| 2.8 | ✅ **Sezon geçmişi / kupa dolabı** | Odanın şampiyonlar listesi, menajer profili (kaç kupa) | S + İ |
 
 Bu fazda maç motoruna dokunulduğu için her değişiklikten sonra `mac-motoru` + `sql-test` skill'leriyle gol ortalaması (~2.5) ve güç–puan ilişkisi yeniden ölçülecek.
 
