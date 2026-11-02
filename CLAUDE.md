@@ -54,8 +54,9 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 009_dinlenme | ✅ `execute_sql`: günlük dinlenme +20, gol sabiti 0.29 → 540 maçta 2.55 gol/maç |
 | 015_penalti | ✅ `execute_sql`: maç içi penaltı (ceza sahasında faul/el, faulü yapana bazen kart), direkt serbest vuruş şutları, gol sabiti 0.275 → 380 maçlık ölçümlerde ~2.53 gol/maç (eski 2.44), 0.29 penaltı/maç, %75 penaltı golü |
 | 016_penalti_sebep | ✅ `execute_sql`: penaltının sebebi (faul %~87 / el), faul ihtimali dripling/savunma oranına göre, serbest vuruşta faul yapan/düşürülen, faule bazen sarı; 3×380 maçta ~2.51 gol, 0.28 penaltı/maç |
-| 017_talimatlar | ⏳ kullanıcı SQL Editor'den çalıştıracak: `teams.instr` (pres/tempo/genişlik 0-2), `set_instr` RPC |
+| 017_talimatlar | ✅ kullanıcı SQL Editor'den (girintiler bozuldu, `set_instr` `execute_sql` ile dosyadaki haliyle yeniden yazıldı): `teams.instr` (pres/tempo/genişlik 0-2), `set_instr` RPC, `offers_player_id_idx` |
 | 018_talimat_etkisi | ✅ `execute_sql`: `_power` talimatları okur (`to_jsonb(t)->'instr'`, kolon yoksa normal), pres +%35 kart / +4 yorgunluk; karışık talimatlarla ~2.6 gol/maç |
+| 019_yz_tarz | ✅ `execute_sql`: YZ takımlarına kimlikten türetilen kalıcı tarz (`_power`; istemcide `teamStyle` aynı hesap) |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |

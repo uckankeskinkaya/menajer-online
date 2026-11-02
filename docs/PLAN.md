@@ -90,5 +90,5 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4e | FM finansı: oyuncu maaşları, maaş bütçesi, sponsor/TV, bilet, itibar, sezon gelir-gider defteri (Kadro → Finans) | ✅ |
 | 4f | Gerçek kulüp renkleri; yıldızlar lig içi sıra + Avrupa seviyesi | ✅ |
 | 4g | Gerçekçi maç görüntüsü: kare kare simülasyon (hız/ivme sınırı, takım bloğu, ofsayt çizgisi, ara pas, serbest top, korner, faul/serbest vuruş, seri penaltı oynatma, anlatım satırları, korner/faul istatistiği, maç içi penaltı ve direkt serbest vuruş (baraj), atak türleri: kornerden kafa, kanattan orta + kafa, uzaktan şut, ara pas, son üçte birde geri pas yok), 2D yakın yayın kamerası, 3D gerçek oranlar | ✅ |
-| 4h | Takım talimatları: pres / tempo / genişlik (maç motoru + Taktik ekranı + maç görüntüsü) | 🟡 017 bekliyor |
+| 4h | Takım talimatları: pres / tempo / genişlik (maç motoru + Taktik ekranı + maç görüntüsü); YZ takımlarına kalıcı tarz; yardımcı antrenör rakip analizi | ✅ |
 | 4i | Maç görüntüsü yeniden yazıldı (sim.js): oyun kurulumu, pres + adam takibi, kaleci uzanması/tutma/çelme, dönen top, file dalgası, gol sevinci, daha hızlı 1x | ✅ |

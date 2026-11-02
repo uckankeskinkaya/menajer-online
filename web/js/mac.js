@@ -2,7 +2,7 @@
 // 2D kuşbakışı (Canvas) ve sevimli 3D (Three.js, istenince yüklenir); ikisi aynı durumdan çizilir, tam senkron.
 // Sadece önemli anlar normal hızda gösterilir; aralar hızla geçer. Oyuncular içinde forma numarası olan dairelerdir.
 // Saha koordinatları 0-1: x en, y boy; ev sahibi y=0 kalesine hücum eder.
-import { esc, slotPositions } from './ui.js';
+import { esc, slotPositions, teamStyle } from './ui.js';
 import { matchKits, drawDot, crestSVG, numColor, lum } from './kit.js';
 import { simulateMatch, frameAt, holderAt, SPM } from './sim.js';
 
@@ -407,7 +407,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   let live = startedAgo >= 0 && startedAgo < liveMs;
   const R = rng(fid * 2654435761);
   const SHOTS = ['goal', 'save', 'miss'];
-  const sim = simulateMatch(fx, events, R, { h: H?.instr, a: A?.instr });
+  const sim = simulateMatch(fx, events, R, { h: teamStyle(H), a: teamStyle(A) });
   const evs = sim.evs;
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.tf ?? e.m + 0.2 }));
   // duran top anları: düdük (penaltı / serbest vuruş)
