@@ -159,7 +159,9 @@ const FRAME = 22 * 2 + 5;               // oyuncular (x,y) + top (x,y,z) + tutan
 const JOG = 4.2, RUN = 7.2, WALK = 2.2; // m/s (izleme saniyesi)
 const PASS_V = 19, SHOT_V = 30;         // m/s
 
-function simulateMatch(fx, events, R) {
+function simulateMatch(fx, events, R, ins = {}) {
+  // takım talimatları (0 düşük / 1 normal / 2 yüksek): pres, tempo, genişlik
+  const IN = { h: { press: 1, tempo: 1, width: 1, ...(ins.h || {}) }, a: { press: 1, tempo: 1, width: 1, ...(ins.a || {}) } };
   const fh = fx.stats?.fh || '4-4-2', fa = fx.stats?.fa || '4-4-2';
   const base = {
     h: slotPositions(fh).map((p) => ({ x: p.x, y: 0.5 + (p.y - 0.5) * 0.92 })),
@@ -189,7 +191,7 @@ function simulateMatch(fx, events, R) {
   for (const e of shots) {
     e.t = Math.max(e.m - 0.4 + R() * 0.3, last + (lastGoal ? 2.9 : 2.0)); last = e.t; lastGoal = e.ev === 'goal';
     e.shooter = (e.s === 'h' ? 0 : 11) + (e.slot ?? (8 + Math.floor(R() * 3)));
-    const u = R(); e.style = e.pen ? 'pen' : e.fk ? 'fk' : u < 0.12 ? 'corner' : u < 0.38 ? 'cross' : u < 0.55 ? 'long' : 'thru'; // korner / kanattan orta / uzaktan şut / ara pas
+    const u = R(), cw = (IN[e.s].width - 1) * 0.1; e.style = e.pen ? 'pen' : e.fk ? 'fk' : u < 0.12 ? 'corner' : u < 0.38 + cw ? 'cross' : u < 0.55 + cw * 0.5 ? 'long' : 'thru'; // korner / kanattan orta / uzaktan şut / ara pas
   }
   const penF = new Set(events.filter((e) => (e.pen || e.fk) && e.f).map((e) => `${e.m}:${e.f}`));
   const fouls = events.filter((e) => (e.ev === 'yellow' || e.ev === 'red') && !penF.has(`${e.m}:${e.p}`)).sort((a, b) => a.m - b.m);
@@ -339,7 +341,7 @@ function simulateMatch(fx, events, R) {
         if (ce && tk === ce.shooter) tk = J(s, tk % 11 === 2 ? 3 : 2);
         dead = { kind: 'corner', side: s, ev: ce }; corners.push({ t, s });
         restart = { t: t + 1.1, x: cx, y: gl - dirY(s) * 0.6, holder: tk, kick: true, corner: true, cev: ce };
-      } else if (dist(P[f.to], ball) < 1.4) { holder = f.to; nextAct = t + 0.12 + R() * 0.22; }
+      } else if (dist(P[f.to], ball) < 1.4) { holder = f.to; nextAct = t + (0.12 + R() * 0.22) * (1 - (IN[sideOf(f.to)].tempo - 1) * 0.3); }
       else { const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0) || 1; loose = { to: f.to, vx: ((f.x1 - f.x0) / L) * 3, vy: ((f.y1 - f.y0) / L) * 3, t0: t }; }
     }
     { const pe = shots[ei];
@@ -454,13 +456,19 @@ function simulateMatch(fx, events, R) {
     }
     // ---- oyuncular: takım bloğu (topa ve topa sahip olmaya göre), ofsayt çizgisi
     const ps = possSide();
-    const presser = holder !== null ? nearest(sideOf(holder) === 'h' ? 'a' : 'h', P[holder]) : -1;
+    let presser = holder !== null ? nearest(sideOf(holder) === 'h' ? 'a' : 'h', P[holder]) : -1, presser2 = -1;
+    if (presser >= 0) {
+      const ds = sideOf(presser);
+      if (IN[ds].press === 2) presser2 = nearest(ds, P[holder], true, presser);
+      if (IN[ds].press === 0 && G(ds, ball.y) > PL * 0.5) presser = -1; // düşük pres: rakip yarı sahada basmaz
+    }
     const bxm = flight ? flight.x1 : ball.x, bym = flight ? flight.y1 : ball.y;
     const blk = {};
     for (const s of ['h', 'a']) {
       const own = ps === s, bg = G(s, bym);
-      const line = own ? clamp(bg - 32, 20, 52) : clamp(bg - 20, 10, 38);
-      blk[s] = { own, line, len: own ? 40 : 28, wid: own ? 0.96 : 0.7, sh: own ? 0.18 : 0.38, off: offLine(s) };
+      const pr = IN[s].press - 1, wd = IN[s].width - 1;
+      const line = own ? clamp(bg - 32, 20, 52) : clamp(bg - 20 + pr * 7, 10, 38 + pr * 8); // yüksek pres: hat önde
+      blk[s] = { own, line, len: own ? 40 : 28 - pr * 3, wid: own ? 0.96 * (1 + wd * 0.07) : 0.7, sh: own ? 0.18 : 0.38, off: offLine(s) };
     }
     for (let j = 0; j < 22; j++) {
       const s = sideOf(j), k = slotOf(j), b = B(j), p = P[j], ro = roles[s][k], bk = blk[s];
@@ -527,6 +535,7 @@ function simulateMatch(fx, events, R) {
         } else if (flight && flight.kind === 'pass' && flight.to === j) { tx = flight.x1; ty = flight.y1; vmax = RUN; }
         else if (loose && loose.to === j) { tx = ball.x; ty = ball.y; vmax = RUN; }
         else if (j === presser) { const d = dist(p, ball); if (d > 2) { tx = ball.x; ty = ball.y; vmax = RUN * 0.85; } }
+        else if (j === presser2) { const d = dist(p, ball); if (d > 5) { tx = (p.x + ball.x) / 2 + (ball.x - p.x) * 0.3; ty = (p.y + ball.y) / 2 + (ball.y - p.y) * 0.3; vmax = RUN * 0.75; } } // ikinci baskı
         else if (attack && nev.style === 'cross' && j === nev.winger) { tx = nev.wx; ty = Yg(s, Math.min(PL - 14, blk[s].off - 1)); vmax = RUN * 0.8; }
         else if (attack && j === nev.shooter) {
           const sp = shotSpot(nev); tx = sp.x;
@@ -839,7 +848,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   let live = startedAgo >= 0 && startedAgo < liveMs;
   const R = rng(fid * 2654435761);
   const SHOTS = ['goal', 'save', 'miss'];
-  const sim = simulateMatch(fx, events, R);
+  const sim = simulateMatch(fx, events, R, { h: H?.instr, a: A?.instr });
   const evs = sim.evs;
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.tf ?? e.m + 0.2 }));
   // duran top anları: düdük (penaltı / serbest vuruş)
