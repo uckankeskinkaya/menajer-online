@@ -195,6 +195,7 @@ function simulateMatch(fx, events, R) {
   const fouls = events.filter((e) => (e.ev === 'yellow' || e.ev === 'red') && !penF.has(`${e.m}:${e.p}`)).sort((a, b) => a.m - b.m);
   for (const f of fouls) f.tf = f.m + 0.2;
   let fi = 0, corner = null, fallen = -1, fallT = 0;
+  const corners = []; // istatistik: korner anları
   const T_END = Math.max(95, last + 14);
   const N = Math.ceil(T_END / SIM_DT) + 2;
   const frames = new Float32Array(N * FRAME);
@@ -336,7 +337,7 @@ function simulateMatch(fx, events, R) {
         for (let k = 2; k < 11; k++) { const d = Math.abs(P[J(s, k)].x - cx) + Math.abs(G(s, P[J(s, k)].y) - PL) * 0.3; if (d < bd) { bd = d; tk = J(s, k); } }
         const ce = f.cev && !f.cev.done ? f.cev : undefined;
         if (ce && tk === ce.shooter) tk = J(s, tk % 11 === 2 ? 3 : 2);
-        dead = { kind: 'corner', side: s, ev: ce };
+        dead = { kind: 'corner', side: s, ev: ce }; corners.push({ t, s });
         restart = { t: t + 1.1, x: cx, y: gl - dirY(s) * 0.6, holder: tk, kick: true, corner: true, cev: ce };
       } else if (dist(P[f.to], ball) < 1.4) { holder = f.to; nextAct = t + 0.12 + R() * 0.22; }
       else { const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0) || 1; loose = { to: f.to, vx: ((f.x1 - f.x0) / L) * 3, vy: ((f.y1 - f.y0) / L) * 3, t0: t }; }
@@ -580,7 +581,7 @@ function simulateMatch(fx, events, R) {
     }
     return e.spot;
   }
-  return { frames, N, evs: shots, T_END, fouls };
+  return { frames, N, evs: shots, T_END, fouls, corners };
 }
 // seri penaltı: kurallara uygun ve sunucudaki skorla (ör. "4-3") birebir biten atış dizisi
 function shootout(pens, R) {
@@ -834,6 +835,22 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   // duran top anları: düdük (penaltı / serbest vuruş)
   for (const e of evs) if (e.setT !== undefined) others.push({ m: e.m, t: e.setT, s: e.s, ev: e.style === 'pen' ? 'penfoul' : 'fkfoul', p: e.f, a: e.p, w: e.w, c: e.c });
   const timeline = [...evs, ...others].sort((a, b) => a.t - b.t);
+  // korner/faul sayıları: sahada görülenler + görünmeyen anlar (şut ve topa sahip olmaya göre, maça özel sabit)
+  const setp = [];
+  for (const c of sim.corners) setp.push({ t: c.t, s: c.s, k: 'c' });
+  for (const f of sim.fouls) if (f.tf < 95) setp.push({ t: f.tf, s: f.s, k: 'f' });
+  for (const e of evs) if (e.setT !== undefined) setp.push({ t: e.setT, s: e.s === 'h' ? 'a' : 'h', k: 'f' });
+  {
+    const R2 = rng(fid * 13 + 7), stt = fx.stats || {};
+    for (const [i, sd] of [[0, 'h'], [1, 'a']]) {
+      const have = (k) => setp.filter((x) => x.s === sd && x.k === k).length;
+      const wantC = Math.round((stt.shots?.[i] ?? 8) * 0.42 + R2() * 2.5);
+      const wantF = Math.round(8 + R2() * 6 + ((stt.poss?.[1 - i] ?? 50) - 50) * 0.12);
+      for (let n = have('c'); n < wantC; n++) setp.push({ t: 1 + R2() * 92, s: sd, k: 'c' });
+      for (let n = have('f'); n < wantF; n++) setp.push({ t: 1 + R2() * 92, s: sd, k: 'f' });
+    }
+  }
+  const styleName = { thru: 'Ara pas', cross: 'Kanat ortası', long: 'Uzaktan', corner: 'Korner', pen: 'Penaltı', fk: 'Serbest vuruş' };
 
   // ---- önemli anlar: goller, kurtarışlar, kırmızı kartlar ve birkaç kaçırma normal hızda; aralar hızla geçer ----
   const CLIP_RATE = 0.22;   // normal hız: senaryo dakikası / sn (bir pas ~1.5 sn)
@@ -884,6 +901,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
   const feed = document.getElementById('mFeed');
   let sh = 0, sa = 0;
   const ls = { shots: [0, 0], on: [0, 0] };
+  let statMin = -1;
 
   function lineupAt(t) {
     const cur = { h: [...startH], a: [...startA] };
@@ -942,6 +960,12 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       ${final ? bar(st.poss?.[0] ?? 50, st.poss?.[1] ?? 50, 'Topa sahip olma', true) : ''}
       ${bar(final ? st.shots?.[0] ?? ls.shots[0] : ls.shots[0], final ? st.shots?.[1] ?? ls.shots[1] : ls.shots[1], 'Şut')}
       ${bar(final ? st.on?.[0] ?? ls.on[0] : ls.on[0], final ? st.on?.[1] ?? ls.on[1] : ls.on[1], 'İsabetli şut')}
+      ${(() => { const upto = final ? 999 : clock, cnt = (sd, k) => setp.filter((x) => x.s === sd && x.k === k && x.t <= upto).length;
+        return bar(cnt('h', 'c'), cnt('a', 'c'), 'Korner') + bar(cnt('h', 'f'), cnt('a', 'f'), 'Faul'); })()}
+      ${final ? (() => { // şutların nereden geldiği
+        const row = (sd) => Object.entries(styleName).map(([k, n]) => [n, evs.filter((e) => e.s === sd && e.style === k).length, evs.filter((e) => e.s === sd && e.style === k && e.ev === 'goal').length]).filter((x) => x[1] > 0)
+          .map(([n, c, g]) => `<span class="chip">${n} <b>${c}</b>${g ? ` · ${g} gol` : ''}</span>`).join('') || '<span class="muted">—</span>';
+        return `<div class="stypes"><small>Şutların kaynağı</small><div>${crestSVG(H, 16)} ${row('h')}</div><div>${crestSVG(A, 16)} ${row('a')}</div></div>`; })() : ''}
       ${final && st.motm ? `<div class="motm">⭐ Maçın adamı <b>${nm(st.motm)}</b> <span class="rt hi">${st.rt?.[st.motm] ?? ''}</span></div>` : ''}
       ${final ? `<details class="lineups" open><summary>Kadrolar ve puanlar</summary><div class="lcols">${lineup('h')}${lineup('a')}</div></details>` : ''}`;
   }
@@ -985,6 +1009,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       } // ileri atlandıysa devre arası gösterilmez
     }
     document.getElementById('mMin').textContent = ended ? (fx.pens ? `MS · pen. ${fx.pens}` : 'MS') : phase === 'pens' ? 'PEN' : `${Math.min(90, Math.floor(clock))}'${clock > 90 ? '+' : ''}`;
+    if (!ended && Math.floor(clock) !== statMin) { statMin = Math.floor(clock); statsHtml(); } // korner/faul sayaçları
     render(dt);
     raf = requestAnimationFrame(step);
   }
