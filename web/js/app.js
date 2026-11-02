@@ -267,7 +267,11 @@ const hasLeague = () => ['league', 'league_cup'].includes(S.game?.settings?.form
 const hasCup = () => ['cup', 'league_cup'].includes(S.game?.settings?.format);
 
 let reloadTimer;
-function subscribe(id) {
+async function subscribe(id) {
+  // Realtime, RLS'i kullanıcının JWT'siyle değerlendirir; publishable key ile bu otomatik gitmiyor.
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await sb.realtime.setAuth(session.access_token);
+  if (S.gameId !== id) return;
   const ch = sb.channel(`oda-${id}`);
   const onChange = (payload) => {
     if (payload.table === 'news' && payload.eventType === 'INSERT' && payload.new && S.game?.status !== 'lobby') {
@@ -310,7 +314,7 @@ const TABS = [
 ];
 function updateHeader() {
   const t = me();
-  const sub = t ? `${teamDot(t)} ${esc(t.name)} · <b>${money(t.budget)}</b>${S.game.status === 'active' ? ` · ${S.game.current_round}. hafta` : ''}` : '';
+  const sub = t ? `${teamDot(t)} ${esc(t.name)}${S.game.status === 'lobby' ? ' · lobi' : ` · <b>${money(t.budget)}</b>`}${S.game.status === 'active' ? ` · ${S.game.current_round}. hafta` : ''}` : '';
   setHeader(esc(S.game.name), sub);
 }
 function renderGame() {
@@ -828,6 +832,7 @@ async function loadProfile() {
 sb.auth.onAuthStateChange((ev, session) => {
   const prev = S.user?.id;
   S.user = session?.user || null;
+  if (session && ev === 'TOKEN_REFRESHED') sb.realtime.setAuth(session.access_token);
   if (prev === S.user?.id && ev !== 'SIGNED_IN') return;
   setTimeout(async () => {
     await loadProfile();

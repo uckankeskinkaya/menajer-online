@@ -55,6 +55,8 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .row2 { display: flex; gap: 10px; } .row2 > * { flex: 1; min-width: 0; }
 .grow { flex: 1; min-width: 0; } .w80 { flex: 0 0 80px !important; }
 .inl { flex-direction: row; align-items: center; gap: 6px; } .inl input { min-width: 0; }
+.mk .inl input[type=number] { min-width: 52px; padding: 10px 4px; text-align: center; }
+.mk .row2 > .inl:first-child { flex: 1.2; }
 .btn { font: inherit; font-weight: 600; color: var(--text); background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-height: 42px; cursor: pointer; }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.primary { background: var(--pri); border-color: var(--pri); color: #062612; }
