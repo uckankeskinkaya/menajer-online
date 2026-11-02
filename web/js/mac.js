@@ -479,6 +479,28 @@ function simulateMatch(fx, events, R) {
   }
   return { frames, N, evs: shots, T_END, fouls };
 }
+// seri penaltı: kurallara uygun ve sunucudaki skorla (ör. "4-3") birebir biten atış dizisi
+function shootout(pens, R) {
+  const m = /^(\d+)-(\d+)$/.exec(String(pens || '').trim());
+  if (!m) return null;
+  const PH = +m[1], PA = +m[2];
+  for (let tries = 0; tries < 40000; tries++) {
+    const k = []; let h = 0, a = 0, nh = 0, na = 0, done = false;
+    while (!done && k.length < 40) {
+      for (const s of ['h', 'a']) {
+        const g = R() < 0.76;
+        if (s === 'h') { nh++; h += g; } else { na++; a += g; }
+        k.push({ s, res: g ? 'goal' : R() < 0.6 ? 'save' : 'miss' });
+        if (nh <= 5 && na <= 5) { // ilk 5 atış: matematiksel olarak bittiyse dur
+          if (h + (5 - nh) < a || a + (5 - na) < h) { done = true; break; }
+        } else if (nh === na && h !== a) { done = true; break; } // ani ölüm
+        if (nh === 5 && na === 5 && h !== a) { done = true; break; }
+      }
+    }
+    if (done && h === PH && a === PA) return k;
+  }
+  return null;
+}
 // t anındaki kare (iki kare arası yumuşak geçiş)
 function frameAt(sim, t, out) {
   const f = Math.max(0, Math.min(sim.N - 2, t / SIM_DT));
@@ -835,16 +857,19 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     if (pauseT > 0) { pauseT -= dt; if (pauseT <= 0) overlay(''); }
     else if ((playing || live) && !ended) advance(dt);
     // ilk yarı sonu
-    if (!htShown && clock >= 45 && phase !== 'clip') {
+    if (!htShown && clock >= 45 && phase !== 'clip' && phase !== 'pens') {
       htShown = true;
+      if (clock < 48) {
       overlay(`<div class="ht"><small>İLK YARI SONU</small><b>${sh} - ${sa}</b></div>`);
       if (!live) pauseT = 2; else setTimeout(() => overlay(''), 4000);
+      } // ileri atlandıysa devre arası gösterilmez
     }
-    document.getElementById('mMin').textContent = ended ? (fx.pens ? `MS · pen. ${fx.pens}` : 'MS') : `${Math.min(90, Math.floor(clock))}'${clock > 90 ? '+' : ''}`;
+    document.getElementById('mMin').textContent = ended ? (fx.pens ? `MS · pen. ${fx.pens}` : 'MS') : phase === 'pens' ? 'PEN' : `${Math.min(90, Math.floor(clock))}'${clock > 90 ? '+' : ''}`;
     render(dt);
     raf = requestAnimationFrame(step);
   }
   function advance(dt) {
+    if (phase === 'pens') { advancePens(dt * (live ? 1 : speed)); return; }
     const sp = live ? 1 : speed;
     if (live) clock = Math.max(clock, liveT());
     if (phase === 'clip') {
@@ -868,16 +893,17 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
       tm = Math.min(cap, tm + dt * CLIP_RATE * sp);
       phaseLabel(nxt && !live && clock < nxt.from - 1 ? '⏩' : '');
       if (nxt && clock >= nxt.from) { ci = i + 1; startClip(nxt); }
-      else if (!nxt && clock >= (live ? 95 : 94.9)) finish();
+      else if (!nxt && clock >= (live ? 95 : 94.9)) { if (!startPens()) finish(); }
       if (!nxt) tm = Math.min(tm, sim.T_END - 0.1);
     }
     pump();
   }
   function endClip() { phase = 'gap'; tm = clip.to; clip = null; }
   function render(dt) {
-    frameAt(sim, tm, frame);
-    const lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock));
-    const st = { ply: frame.ply, ids: lu.ids, gone: lu.gone, kits, ball: frame.ball, carrier: frame.carrier, num, name: (id) => names.get(id) || '', showNames };
+    let fr = frame, lu;
+    if (phase === 'pens') { fr = pensState(); lu = pens.lu; }
+    else { frameAt(sim, tm, frame); lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock)); }
+    const st = { ply: fr.ply, ids: lu.ids, gone: lu.gone, kits, ball: fr.ball, carrier: fr.carrier, num, name: (id) => names.get(id) || '', showNames };
     if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
   }
   function endLive() {
@@ -886,8 +912,73 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     document.getElementById('mLive')?.remove();
     document.querySelector('.mctrl')?.classList.remove('is-live');
   }
+  // ---- seri penaltı: kale üst tarafta, oyuncular orta çizgide, atıcı sırayla gelir ----
+  let pens = null;
+  const KICK = 3.4; // sn / atış
+  function startPens() {
+    if (!fx.pens || pens?.done) return false;
+    const ks = shootout(fx.pens, rng(fid * 7 + 3));
+    if (!ks) return false;
+    const lu = lineupAt(95);
+    const order = { h: [], a: [] };
+    for (const s of ['h', 'a']) for (const k of [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]) if (!lu.gone.has(lu.ids[s][k])) order[s].push(k);
+    const cnt = { h: 0, a: 0 }, PR = rng(fid * 11 + 5);
+    for (const k of ks) {
+      k.slot = order[k.s][cnt[k.s]++ % order[k.s].length];
+      const side = PR() < 0.5 ? -1 : 1;
+      k.tx = 0.5 + side * (k.res === 'miss' ? 4.4 + PR() * 1.2 : 1.6 + PR() * 1.8) / PW;
+      k.over = k.res === 'miss' && PR() < 0.4; if (k.over) k.tx = 0.5 + side * PR() * 2.5 / PW;
+      k.dive = k.res === 'save' ? side : (PR() < 0.35 ? side : -side); // kurtarışta doğru köşe
+    }
+    pens = { ks, i: 0, t: 0, h: 0, a: 0, lu, done: false, said: -1 };
+    phase = 'pens'; clip = null; replay = null; overlay(''); clock = 95;
+    while (shown < timeline.length) emit(timeline[shown++], true);
+    document.getElementById('sH').textContent = fx.hg; document.getElementById('sA').textContent = fx.ag;
+    document.getElementById('mMin').textContent = 'PEN';
+    phaseLabel('Penaltılar 0 - 0');
+    return true;
+  }
+  function advancePens(dt) {
+    pens.t += dt;
+    const k = pens.ks[pens.i];
+    if (pens.t >= 2.15 && pens.said !== pens.i) { // sonuç
+      pens.said = pens.i;
+      if (k.res === 'goal') pens[k.s]++;
+      overlay(`<span class="tag">${k.res === 'goal' ? 'GOL' : k.res === 'save' ? 'KURTARDI' : 'KAÇIRDI'} · ${esc(names.get(pens.lu.ids[k.s][k.slot]) || '')}</span>`);
+      phaseLabel(`Penaltılar ${pens.h} - ${pens.a}`);
+    }
+    if (pens.t >= KICK) {
+      overlay(''); pens.t = 0; pens.i++;
+      if (pens.i >= pens.ks.length) { pens.done = true; phase = 'gap'; finish(); }
+    }
+  }
+  function pensState() {
+    const k = pens.ks[Math.min(pens.i, pens.ks.length - 1)], u = pens.t;
+    const ply = { h: [], a: [] }, dfn = k.s === 'h' ? 'a' : 'h';
+    for (const s of ['h', 'a']) for (let i = 0; i < 11; i++) {
+      // orta çizgide yan yana; kaleciler: savunan kalede, diğeri kenarda
+      let x = 0.22 + (i / 10) * 0.56, y = s === 'h' ? 0.47 : 0.53;
+      if (i === 0) { x = s === dfn ? 0.5 : 0.12; y = s === dfn ? 0.012 : 0.5; }
+      ply[s].push({ x, y });
+    }
+    const spotY = 11 / PL, ball = { x: 0.5, y: spotY, z: 0 };
+    const kp = ply[k.s][k.slot], home = { x: kp.x, y: kp.y };
+    const walk = clamp(u / 1.1, 0, 1), run = clamp((u - 1.2) / 0.45, 0, 1);
+    kp.x = lerp(home.x, 0.5 - 0.02, walk); kp.y = lerp(home.y, spotY + 0.06, walk); // yürür, geri çekilir
+    if (run > 0) { kp.x = lerp(0.48, 0.495, run); kp.y = lerp(spotY + 0.06, spotY + 0.012, run); }
+    const gk = ply[dfn][0], fl = clamp((u - 1.65) / 0.4, 0, 1);
+    if (fl > 0) {
+      const ty = k.res === 'save' ? 0.016 : k.over ? -0.006 : -0.01;
+      ball.x = lerp(0.5, k.tx, fl); ball.y = lerp(spotY, ty, fl); ball.z = k.over ? fl * 3.2 : Math.sin(Math.PI * fl * 0.5) * 0.9;
+      gk.x = 0.5 + k.dive * clamp((u - 1.62) / 0.35, 0, 1) * (k.res === 'save' ? Math.abs(k.tx - 0.5) : 2.6 / PW);
+      if (u > 2.1 && k.res === 'goal') { ball.z = 0.2; }
+    }
+    const carrier = u < 1.65 ? { s: k.s, i: k.slot } : null;
+    return { ply, ball, carrier };
+  }
   function finish() {
     if (ended) return;
+    if (phase === 'pens') { pens.done = true; phase = 'gap'; }
     ended = true; endLive();
     replay = null; overlay(''); phaseLabel('');
     clock = 95;
@@ -897,6 +988,7 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     statsHtml(true);
   }
   function restart() {
+    pens = null;
     ended = false; clock = 0; tm = 0; ci = 0; phase = 'gap'; clip = null; replay = null; shown = 0; sh = sa = 0; htShown = false;
     ls.shots = [0, 0]; ls.on = [0, 0]; feed.innerHTML = '';
     document.getElementById('sH').textContent = 0; document.getElementById('sA').textContent = 0;
@@ -913,7 +1005,8 @@ export async function openMatch(sb, fid, { teamById, liveMs = 540000, onClose })
     pauseT = 0; overlay('');
     if (phase === 'clip') { replay = null; tm = clip.to; endClip(); }
     const nxt = clips[nextClipIndex()];
-    if (nxt) { clock = nxt.from; ci++; startClip(nxt); pump(); } else finish();
+    if (phase === 'pens') finish();
+    else if (nxt) { clock = nxt.from; ci++; startClip(nxt); pump(); } else if (!startPens()) finish();
   };
   document.querySelectorAll('#mMode button').forEach((b) => (b.onclick = async () => {
     const m = b.dataset.m;
