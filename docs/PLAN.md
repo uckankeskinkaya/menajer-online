@@ -97,3 +97,5 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4l | Kariyerde Avrupa kupası: lig ilk 2-4'ü + Avrupa devleri, 4 grup + rövanşlı eleme + final, ödüller, Lig → Avrupa sekmesi, kupa dolabında Avrupa | ✅ |
 | 4m | Antrenman: haftalık odak (genel/hücum/orta saha/savunma/fizik) + yoğunluk; gençler gelişim puanıyla güçlenir, yoğunlukta sakatlık/moral bedeli (Kadro → Antrenman) | ✅ |
 | 4n | Oynama süresi (maçta oynayan gence ek gelişim, kenarda kalan önemli oyuncuya moral cezası) + transferde gözlemci raporu (kadroya katkı, potansiyel, yaş; 1-5 yıldız) | ✅ |
+| 4o | Kiralık oyuncu: YZ kulüplerinden sezon sonuna kadar kiralama (bedel %10, maaş sende, en fazla 4), satılamaz, sezon sonunda döner | 🟡 (032 uygulanınca ✅) |
+| 4p | Maç görüntüsü: tüm saha + yatay ekranda yatay saha, skor şeridi, canlı topa sahip olma; kaleci dağıtımı takımda kalır (%55 → ~%99, uzun topların bir kısmı hava topunda kaybedilir), son üçte birde geri pas %27 → %14, orta saha topa yakın (−11.8 → −7.5 m), ataklar orta/ara pasla sonuçlanır; 3D kamera yeni açılar | ✅ |

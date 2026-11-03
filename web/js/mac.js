@@ -5,7 +5,7 @@
 import { esc, slotPositions, teamStyle, slots } from './ui.js';
 import { MENTALITY } from './config.js';
 import { matchKits, drawDot, crestSVG, numColor, lum } from './kit.js';
-import { simulateMatch, frameAt, holderAt, SPM } from './sim.js';
+import { simulateMatch, frameAt, holderAt, SPM, FRAME } from './sim.js';
 
 const GOAL_W = 7.32 / 68;      // kale ağzı (saha enine oranla)
 const PL = 105, PW = 68;       // metre
@@ -80,34 +80,39 @@ class Pitch2D {
     this.cv.width = this.W * dpr; this.cv.height = this.H * dpr;
     this.cv.style.width = `${this.W}px`; this.cv.style.height = `${this.H}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const gd = Math.max(7, this.H * 0.018), m = Math.max(10, this.W * 0.035);
-    this.L = m; this.T = m + gd; this.w = this.W - 2 * m; this.h = this.H - 2 * (m + gd); this.gd = gd;
+    this.land = this.W > this.H * 1.1; // yatay ekran: saha yatay, ev sahibinin kalesi solda
+    if (this.land) {
+      const gd = Math.max(7, this.W * 0.016), m = Math.max(8, this.H * 0.035);
+      this.L = m + gd; this.T = m; this.w = this.W - 2 * (m + gd); this.h = this.H - 2 * m; this.gd = gd;
+    } else {
+      const gd = Math.max(7, this.H * 0.018), m = Math.max(8, this.W * 0.03);
+      this.L = m; this.T = m + gd; this.w = this.W - 2 * m; this.h = this.H - 2 * (m + gd); this.gd = gd;
+    }
     this.dpr = dpr;
-    // yayın kamerası: sahanın topun çevresindeki kısmı büyütülerek gösterilir
-    this.Z = this.W < 600 ? 1.6 : 1.35;
-    if (this.cam) this.cam.snap = true; else this.cam = { x: 0.5, y: 0.5, snap: true };
   }
   draw(st) {
-    const { ctx, L, T, w, h, W, H, Z, dpr, cam } = this;
-    const X = (x) => L + x * w, Y = (y) => T + y * h;
-    // kamera topu yumuşakça izler (sahne geçişinde keser), saha dışına taşmaz
-    const tx = clamp(X(st.ball.x), W / (2 * Z), W - W / (2 * Z)), ty = clamp(Y(st.ball.y), H / (2 * Z), H - H / (2 * Z));
-    if (cam.snap || Math.hypot(tx - cam.x * W, ty - cam.y * H) > H * 0.3) { cam.x = tx / W; cam.y = ty / H; cam.snap = false; }
-    else { cam.x += (tx / W - cam.x) * 0.06; cam.y += (ty / H - cam.y) * 0.06; }
+    const { ctx, L, T, w, h, W, H, dpr, land } = this;
+    // veri koordinatı (x en, y boy) → ekran; yatayda boy soldan sağa
+    const SX = (p) => (land ? L + (1 - p.y) * w : L + p.x * w), SY = (p) => (land ? T + p.x * h : T + p.y * h);
+    const side = land ? h : w; // sahanın eni (68 m) piksel
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#1f5e25'; ctx.fillRect(0, 0, W, H);
-    ctx.setTransform(dpr * Z, 0, 0, dpr * Z, dpr * (W / 2 - Z * cam.x * W), dpr * (H / 2 - Z * cam.y * H));
-    drawPitch(ctx, L, T, w, h);
-    drawGoals(ctx, L, T, w, h, this.gd);
-    if (Math.abs(st.ripple || 0) > 0.02) { // gol: file dalgalanır
-      const rp = Math.abs(st.ripple), top = st.ripple > 0, gw = (7.32 / PW) * w, gx = L + w / 2 - gw / 2, d0 = this.gd;
-      const y0 = top ? T - d0 : T + h, wave = Math.sin(performance.now() / 45) * d0 * 0.35 * rp;
-      ctx.save(); ctx.fillStyle = `rgba(255,255,255,${0.35 * rp})`; ctx.fillRect(gx, y0 + (top ? -wave : wave) * 0.5, gw, d0);
-      ctx.strokeStyle = `rgba(255,255,255,${0.7 * rp})`; ctx.lineWidth = 1;
-      for (let i = 1; i < 10; i++) { const x = gx + (i * gw) / 10, bow = Math.sin(i * 0.9 + performance.now() / 60) * d0 * 0.4 * rp; ctx.beginPath(); ctx.moveTo(x, y0); ctx.quadraticCurveTo(x + bow, y0 + d0 / 2, x, y0 + d0); ctx.stroke(); }
+    ctx.fillStyle = '#1d5a23'; ctx.fillRect(0, 0, W, H);
+    { // saha çizgileri: dikey çizilir, yatay ekranda döndürülür
+      ctx.save();
+      const vw = land ? h : w, vh = land ? w : h, vL = land ? -h / 2 : L, vT = land ? -w / 2 : T;
+      if (land) { ctx.translate(L + w / 2, T + h / 2); ctx.rotate(Math.PI / 2); }
+      drawPitch(ctx, vL, vT, vw, vh);
+      drawGoals(ctx, vL, vT, vw, vh, this.gd);
+      if (Math.abs(st.ripple || 0) > 0.02) { // gol: file dalgalanır
+        const rp = Math.abs(st.ripple), top = st.ripple > 0, gw = (7.32 / PW) * vw, gx = vL + vw / 2 - gw / 2, d0 = this.gd;
+        const y0 = top ? vT - d0 : vT + vh, wave = Math.sin(performance.now() / 45) * d0 * 0.35 * rp;
+        ctx.fillStyle = `rgba(255,255,255,${0.35 * rp})`; ctx.fillRect(gx, y0 + (top ? -wave : wave) * 0.5, gw, d0);
+        ctx.strokeStyle = `rgba(255,255,255,${0.7 * rp})`; ctx.lineWidth = 1;
+        for (let i = 1; i < 10; i++) { const x = gx + (i * gw) / 10, bow = Math.sin(i * 0.9 + performance.now() / 60) * d0 * 0.4 * rp; ctx.beginPath(); ctx.moveTo(x, y0); ctx.quadraticCurveTo(x + bow, y0 + d0 / 2, x, y0 + d0); ctx.stroke(); }
+      }
       ctx.restore();
     }
-    const size = Math.max(14, w * 0.05);
+    const size = Math.max(14, side * 0.05);
     const items = [];
     for (const s of ['h', 'a']) st.ply[s].forEach((p, i) => { if (!st.gone.has(st.ids[s][i])) items.push({ s, i, p }); });
     items.sort((a, b) => a.p.y - b.p.y);
@@ -117,23 +122,23 @@ class Pitch2D {
       const isC = st.carrier && st.carrier.s === it.s && st.carrier.i === it.i;
       const down = st.fallen && st.fallen.s === it.s && st.fallen.i === it.i;
       if (down) { // yerde: yana yatmış, üstünde çarpışma işareti
-        ctx.save(); ctx.translate(X(it.p.x), Y(it.p.y)); ctx.rotate(Math.PI / 2.4); ctx.scale(1, 0.55);
+        ctx.save(); ctx.translate(SX(it.p), SY(it.p)); ctx.rotate(Math.PI / 2.4); ctx.scale(1, 0.55);
         drawDot(ctx, 0, 0, size / 2, kit, st.num(st.ids[it.s][it.i]));
         ctx.restore();
         ctx.save(); ctx.strokeStyle = '#facc15'; ctx.lineWidth = Math.max(1.5, size * 0.07);
-        const cx = X(it.p.x) + size * 0.45, cy = Y(it.p.y) - size * 0.55;
+        const cx = SX(it.p) + size * 0.45, cy = SY(it.p) - size * 0.55;
         for (let a = 0; a < 6; a++) { const an = (a / 6) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(cx + Math.cos(an) * size * 0.12, cy + Math.sin(an) * size * 0.12); ctx.lineTo(cx + Math.cos(an) * size * 0.3, cy + Math.sin(an) * size * 0.3); ctx.stroke(); }
         ctx.restore();
       } else if (it.i === 0 && Math.abs(st.dive?.[it.s] || 0) > 0.02) { // kaleci uzanıyor: yana yatık, gerilmiş
         const v = st.dive[it.s];
-        ctx.save(); ctx.translate(X(it.p.x), Y(it.p.y)); ctx.rotate(v * Math.PI / 2.2); ctx.scale(1 + Math.abs(v) * 0.35, 1 - Math.abs(v) * 0.3);
+        ctx.save(); ctx.translate(SX(it.p), SY(it.p)); ctx.rotate(v * Math.PI / 2.2); ctx.scale(1 + Math.abs(v) * 0.35, 1 - Math.abs(v) * 0.3);
         drawDot(ctx, 0, 0, size / 2, kit, st.num(st.ids[it.s][it.i]));
         ctx.restore();
-      } else drawDot(ctx, X(it.p.x), Y(it.p.y), size / 2, kit, st.num(st.ids[it.s][it.i]), { highlight: isC });
+      } else drawDot(ctx, SX(it.p), SY(it.p), size / 2, kit, st.num(st.ids[it.s][it.i]), { highlight: isC });
       if (st.prev && !down) { // koştuğu yön: dairenin kenarında küçük çentik
-        const q = st.prev[it.s][it.i], vx = (it.p.x - q.x) * w, vy = (it.p.y - q.y) * h, sp = Math.hypot(vx, vy);
+        const q = st.prev[it.s][it.i], vx = SX(it.p) - SX(q), vy = SY(it.p) - SY(q), sp = Math.hypot(vx, vy);
         if (sp > 0.6) {
-          const ux = vx / sp, uy = vy / sp, R0 = size / 2 + 1.5, cx = X(it.p.x), cy = Y(it.p.y);
+          const ux = vx / sp, uy = vy / sp, R0 = size / 2 + 1.5, cx = SX(it.p), cy = SY(it.p);
           ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath();
           ctx.moveTo(cx + ux * (R0 + size * 0.22), cy + uy * (R0 + size * 0.22));
           ctx.lineTo(cx + ux * R0 - uy * size * 0.16, cy + uy * R0 + ux * size * 0.16);
@@ -147,37 +152,37 @@ class Pitch2D {
           ctx.font = `600 ${Math.max(7, size * 0.36)}px Inter, system-ui, sans-serif`;
           ctx.textAlign = 'center'; ctx.textBaseline = 'top';
           ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(8,14,26,.75)'; ctx.lineJoin = 'round';
-          ctx.strokeText(nm, X(it.p.x), Y(it.p.y) + size * 0.55);
-          ctx.fillStyle = '#fff'; ctx.fillText(nm, X(it.p.x), Y(it.p.y) + size * 0.55);
+          ctx.strokeText(nm, SX(it.p), SY(it.p) + size * 0.55);
+          ctx.fillStyle = '#fff'; ctx.fillText(nm, SX(it.p), SY(it.p) + size * 0.55);
         }
       }
     }
     if (carrier) {
       const name = st.name(st.ids[carrier.s][carrier.i]);
       ctx.font = `600 ${Math.max(10, size * 0.42)}px Inter, system-ui, sans-serif`;
-      const tw = ctx.measureText(name).width + 10, x = X(carrier.p.x), y = Y(carrier.p.y) + size * 0.68;
+      const tw = ctx.measureText(name).width + 10, x = SX(carrier.p), y = SY(carrier.p) + size * 0.68;
       ctx.fillStyle = 'rgba(8,14,26,.82)';
       ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - tw / 2, y, tw, size * 0.62, 6) : ctx.rect(x - tw / 2, y, tw, size * 0.62); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(name, x, y + size * 0.31);
     }
     { // topun izi (pas ve şutlarda)
-      const bx = X(st.ball.x), by = Y(st.ball.y) - st.ball.z * 2.4, tr = (this.trail ||= []);
+      const bx = SX(st.ball), by = SY(st.ball) - st.ball.z * 2.4, tr = (this.trail ||= []);
       const lastP = tr[tr.length - 1];
       if (lastP && Math.hypot(bx - lastP.x, by - lastP.y) > 40) tr.length = 0; // sahne geçişi
       tr.push({ x: bx, y: by }); if (tr.length > 9) tr.shift();
       const moving = st.carrier === null && tr.length > 2 && Math.hypot(bx - tr[0].x, by - tr[0].y) > 6;
-      if (moving) { ctx.save(); ctx.lineCap = 'round'; for (let i = 1; i < tr.length; i++) { ctx.strokeStyle = `rgba(255,255,255,${0.05 + 0.4 * i / tr.length})`; ctx.lineWidth = Math.max(1, w * 0.004 * (i / tr.length) * 2.2); ctx.beginPath(); ctx.moveTo(tr[i - 1].x, tr[i - 1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke(); } ctx.restore(); }
+      if (moving) { ctx.save(); ctx.lineCap = 'round'; for (let i = 1; i < tr.length; i++) { ctx.strokeStyle = `rgba(255,255,255,${0.05 + 0.4 * i / tr.length})`; ctx.lineWidth = Math.max(1, side * 0.004 * (i / tr.length) * 2.2); ctx.beginPath(); ctx.moveTo(tr[i - 1].x, tr[i - 1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke(); } ctx.restore(); }
     }
-    const b = st.ball, r = Math.max(3.5, w * 0.014);
+    const b = st.ball, r = Math.max(3, side * 0.012), bxx = SX(b);
     ctx.fillStyle = 'rgba(0,0,0,.35)';
-    ctx.beginPath(); ctx.ellipse(X(b.x) + b.z * 0.8, Y(b.y) + 2, r, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-    const by = Y(b.y) - b.z * 2.4;
-    const gr = ctx.createRadialGradient(X(b.x) - r * 0.4, by - r * 0.4, r * 0.2, X(b.x), by, r);
+    ctx.beginPath(); ctx.ellipse(bxx + b.z * 0.8, SY(b) + 2, r, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+    const by = SY(b) - b.z * 2.4;
+    const gr = ctx.createRadialGradient(bxx - r * 0.4, by - r * 0.4, r * 0.2, bxx, by, r);
     gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#cfd6e0');
-    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X(b.x), by, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(bxx, by, r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#1b1f27'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#1b1f27'; ctx.beginPath(); ctx.arc(X(b.x), by, r * 0.35, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1b1f27'; ctx.beginPath(); ctx.arc(bxx, by, r * 0.35, 0, Math.PI * 2); ctx.fill();
   }
   dispose() {}
 }
@@ -366,8 +371,13 @@ class Pitch3D {
     this.camT.x = lerp(this.camT.x, W(b.x) * 0.6, k);
     this.camT.z = lerp(this.camT.z, Z(b.y), k);
     const portrait = this.camera.aspect < 1;
-    this.camera.position.set(this.camT.x - (portrait ? 28 : 34), portrait ? 23 : 18, this.camT.z * (portrait ? 0.93 : 0.9));
-    this.camera.lookAt(this.camT.x, 0, this.camT.z);
+    if (portrait) { // dikey: kale arkasından yüksek, sahanın boyuna bakar (2D ile aynı yön)
+      this.camera.position.set(this.camT.x * 0.25, 40, this.camT.z * 0.7 + 34);
+      this.camera.lookAt(this.camT.x * 0.25, 0, this.camT.z * 0.7 - 6);
+    } else { // yatay: tribünden geniş yayın açısı
+      this.camera.position.set(this.camT.x * 0.3 - 52, 36, this.camT.z * 0.85);
+      this.camera.lookAt(this.camT.x * 0.3, 0, this.camT.z * 0.85);
+    }
     this.renderer.render(this.scene, this.camera);
   }
   dispose() { try { this.renderer.dispose(); this.renderer.domElement.remove(); } catch { /* yok */ } }
@@ -431,6 +441,10 @@ export async function openMatch(sb, fid, opts) {
   const SHOTS = ['goal', 'save', 'miss'];
   const sim = simulateMatch(fx, events, R, { h: teamStyle(H), a: teamStyle(A) });
   const evs = sim.evs;
+  // topa sahip olma: simülasyon karelerinden birikimli (ev sahibi payı)
+  const possCum = new Float32Array(sim.N + 1), possTot = new Float32Array(sim.N + 1);
+  for (let i = 0; i < sim.N; i++) { const hh = sim.frames[i * FRAME + 47]; possCum[i + 1] = possCum[i] + (hh >= 0 && hh < 11 ? 1 : 0); possTot[i + 1] = possTot[i] + (hh >= 0 ? 1 : 0); }
+  const possAt = (tMin) => { const i = clamp(Math.floor((tMin * SPM) / sim.DT), 1, sim.N); return possTot[i] > 40 ? possCum[i] / possTot[i] : 0.5; };
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.tf ?? e.m + 0.2 }));
   // duran top anları: düdük (penaltı / serbest vuruş)
   for (const e of evs) if (e.setT !== undefined) others.push({ m: e.m, t: e.setT, s: e.s, ev: e.style === 'pen' ? 'penfoul' : 'fkfoul', p: e.f, a: e.p, w: e.w, c: e.c });
@@ -498,13 +512,16 @@ export async function openMatch(sb, fid, opts) {
 
   root.innerHTML = `
   <div class="mwrap">
-    <div class="mboard"><button class="mclose" id="mClose" title="Kapat">✕</button>
-      <div class="mteam">${crestSVG(H, 34)}<b>${esc(H?.name)}</b></div>
-      <div class="mscore"><span id="sH">0</span><i>-</i><span id="sA">0</span><small id="mMin">0'</small>${live ? '<small class="livebadge" id="mLive">● CANLI</small>' : ''}</div>
-      <div class="mteam r"><b>${esc(A?.name)}</b>${crestSVG(A, 34)}</div>
+    <div class="mbar">
+      <div class="mclock"><b id="mMin">0'</b>${live ? '<small class="livebadge" id="mLive">● CANLI</small>' : ''}</div>
+      <div class="mtm" style="background:${esc(kits.h.c1)};color:${numColor(kits.h)}">${crestSVG(H, 24)}<b>${esc(H?.short || H?.name)}</b><span class="lname">${esc(H?.name)}</span></div>
+      <div class="msc"><span id="sH">0</span><span id="sA">0</span></div>
+      <div class="mtm r" style="background:${esc(kits.a.c1)};color:${numColor(kits.a)}"><span class="lname">${esc(A?.name)}</span><b>${esc(A?.short || A?.name)}</b>${crestSVG(A, 24)}</div>
+      <button class="mclose" id="mClose" title="Kapat">✕</button>
     </div>
     <div class="mstage" id="mStage"><canvas id="pitchCv"></canvas><div class="m3d" id="m3d"></div>
       <div class="mphase" id="mPhase"></div><div class="mflash" id="mFlash"></div><div class="mover" id="mOver"></div></div>
+    <div class="mposs" id="mPoss"><i style="background:${esc(kits.h.c1)};color:${numColor(kits.h)}">%50</i><i style="background:${esc(kits.a.c1)};color:${numColor(kits.a)}">%50</i></div>
     <div class="mctrl ${live ? 'is-live' : ''}">
       <button class="btn sm icon" id="mPlay" title="Oynat/durdur">❚❚</button>
       <div class="seg sm" id="mSpeed">${[1, 2, 4].map((s) => `<button data-s="${s}" class="${s === 1 ? 'on' : ''}">${s}x</button>`).join('')}</div>
@@ -521,7 +538,10 @@ export async function openMatch(sb, fid, opts) {
   const host3d = document.getElementById('m3d');
   r2d = new Pitch2D(cv);
   let r3d = null, mode = '2d';
-  onResize = () => { r2d.resize(); r3d?.resize(); };
+  const wrapEl = root.querySelector('.mwrap');
+  const setLand = () => wrapEl.classList.toggle('land', window.innerWidth > window.innerHeight * 1.05);
+  setLand(); r2d.resize();
+  onResize = () => { setLand(); r2d.resize(); r3d?.resize(); };
   window.addEventListener('resize', onResize);
 
   // oynatma durumu: clock = ekrandaki maç dakikası, tm = sahada oynatılan senaryo zamanı
@@ -685,12 +705,17 @@ export async function openMatch(sb, fid, opts) {
   }
   function endClip() { phase = 'gap'; tm = clip.to; clip = null; }
   const prevFrame = { ply: { h: Array.from({ length: 11 }, () => ({ x: 0, y: 0 })), a: Array.from({ length: 11 }, () => ({ x: 0, y: 0 })) }, ball: { x: 0, y: 0, z: 0 } };
+  let renderN = 0;
   function render(dt) {
     let fr = frame, lu, prev = null;
     if (phase === 'pens') { fr = pensState(); lu = pens.lu; }
     else { frameAt(sim, tm, frame); frameAt(sim, Math.max(0, tm - 0.04), prevFrame); prev = prevFrame.ply; lu = lineupAt(Math.max(tm, phase === 'clip' ? tm : clock)); }
     const st = { ply: fr.ply, ids: lu.ids, gone: lu.gone, kits, ball: fr.ball, carrier: fr.carrier, prev, fallen: fr.fallen, dive: fr.dive || { h: 0, a: 0 }, ripple: fr.ripple || 0, num, name: (id) => names.get(id) || '', showNames };
     if (mode === '3d' && r3d?.ready) r3d.draw(st, dt); else r2d.draw(st);
+    if ((renderN = (renderN + 1) % 15) === 0) { // topa sahip olma çubuğu
+      const ph = Math.round(possAt(tm) * 100), bars = document.querySelectorAll('#mPoss i');
+      if (bars.length === 2) { bars[0].style.flexGrow = ph; bars[0].textContent = `%${ph}`; bars[1].style.flexGrow = 100 - ph; bars[1].textContent = `%${100 - ph}`; }
+    }
   }
   function endLive() {
     if (!live) return;

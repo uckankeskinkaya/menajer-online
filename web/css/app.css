@@ -397,3 +397,33 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .xpbar i { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #22c55e); border-radius: inherit; }
 .scout { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
 .scout ul { margin: 6px 0 0; padding-left: 18px; } .scout li { margin: 3px 0; }
+.loanbox { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+.loanbox p { margin: 6px 0; }
+/* ---------- maç ekranı: skor şeridi, tüm saha, topa sahip olma ---------- */
+.mbar { display: flex; align-items: stretch; gap: 6px; background: #05080f; border-radius: 12px; padding: 6px; }
+.mclock { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 52px; padding: 0 4px; }
+.mclock b { font: 800 22px/1 var(--disp); color: #fff; }
+.mclock .livebadge { font: 700 10px/1 var(--font); color: #f87171; animation: blink 1.4s infinite; margin-top: 3px; white-space: nowrap; }
+.mtm { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.mtm.r { justify-content: flex-end; text-align: right; }
+.mtm b { font: 800 20px/1 var(--disp); letter-spacing: .02em; white-space: nowrap; }
+.mtm .lname { display: none; font: 800 20px/1 var(--disp); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mtm svg { flex: none; }
+.msc { display: flex; align-items: center; gap: 14px; padding: 0 8px; font: 800 30px/1 var(--disp); color: #fff; }
+.mbar .mclose { position: static; flex: none; align-self: center; }
+.mposs { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: #05080f; }
+.mposs i { font-style: normal; display: flex; align-items: center; justify-content: center; font: 800 15px/1 var(--disp); flex: 50 1 0; min-width: 44px; transition: flex-grow .6s; }
+.mstage { aspect-ratio: 0.66; max-height: 70vh; }
+@media (min-width: 420px) { .mtm .lname { display: block; } .mtm b { display: none; } }
+/* yatay ekran: saha yatay ve geniş, kontroller altta */
+.mwrap.land { max-width: 1200px; gap: 6px; padding-top: max(6px, env(safe-area-inset-top)); }
+.mwrap.land .mstage { aspect-ratio: 1.62; max-height: calc(100vh - 150px); width: auto; max-width: 100%; }
+.mwrap.land .mstage.is3d { aspect-ratio: 1.62; }
+@media (orientation: landscape) and (max-height: 520px) { /* telefon yatay: saha ekranı doldursun */
+  .mwrap.land { padding: 4px 8px 20px; }
+  .mwrap.land .mbar { padding: 4px; } .mwrap.land .mtm { padding: 3px 8px; } .mwrap.land .mtm b, .mwrap.land .mtm .lname { font-size: 17px; }
+  .mwrap.land .msc { font-size: 24px; } .mwrap.land .mclock b { font-size: 18px; }
+  .mwrap.land .mposs { height: 20px; } .mwrap.land .mposs i { font-size: 13px; }
+  .mwrap.land .mstage { max-height: calc(100vh - 128px); border-radius: 10px; }
+  .mwrap.land .mctrl .btn, .mwrap.land .mctrl .seg button { min-height: 34px; }
+}
