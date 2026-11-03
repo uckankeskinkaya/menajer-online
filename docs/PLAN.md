@@ -94,4 +94,4 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4i | Maç görüntüsü yeniden yazıldı (sim.js): oyun kurulumu, pres + adam takibi, kaleci uzanması/tutma/çelme, dönen top, file dalgası, gol sevinci, daha hızlı 1x | ✅ |
 | 4j | Moral + basın toplantısı, sözleşmeler (uzatma / bedelsiz ayrılık), altyapıdan genç oyuncular | ✅ |
 | 4k | Devre arası kararları (kariyer): maç 45'te durur, takım konuşması, değişiklik, oyun anlayışı, talimat | ✅ |
-| 4l | Kariyerde Avrupa kupası: lig ilk 2-4'ü + Avrupa devleri, 4 grup + rövanşlı eleme + final, ödüller, Lig → Avrupa sekmesi, kupa dolabında Avrupa | 🟡 (026 SQL Editor'de uygulanınca ✅) |
+| 4l | Kariyerde Avrupa kupası: lig ilk 2-4'ü + Avrupa devleri, 4 grup + rövanşlı eleme + final, ödüller, Lig → Avrupa sekmesi, kupa dolabında Avrupa | ✅ |
