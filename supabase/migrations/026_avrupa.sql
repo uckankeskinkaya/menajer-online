@@ -1,14 +1,10 @@
--- MENAJER ONLINE 026: kariyerde Avrupa kupası. SQL Editor'den çalıştır (alter table var).
+-- MENAJER ONLINE 026: kariyerde Avrupa kupası (fonksiyonlar, execute_sql ile). Tablo değişiklikleri ve yetkiler: 027_avrupa_yetki.sql (SQL Editor).
 -- 16 takım: kariyer liginden ilk 4 (ENG/ESP/GER/ITA), 3 (FRA) ya da 2 (diğerleri) + diğer liglerin en güçlü kulüpleri (misafir, ligde oynamaz).
 -- İlk sezon kadro gücüne göre, sonraki sezonlar bir önceki lig sıralamasına göre katılır.
 -- 4 grup x 4 takım çift devre (6 maç), gruplardan ilk 2 çeyrek finale; çeyrek ve yarı final rövanşlı, final tek maç.
 -- Maçlar lig haftalarının arasına yayılır (iç kupa haftalarına denk getirilmez).
 -- fixtures: comp 'euro', cup_round 0 = grup (tie = grup no, leg = grup maçı no), 1 = çeyrek, 2 = yarı, 3 = final.
 
-alter table public.teams add column if not exists guest boolean not null default false;
-alter table public.games add column if not exists euro jsonb;
-alter table public.fixtures drop constraint if exists fixtures_comp_check;
-alter table public.fixtures add constraint fixtures_comp_check check (comp in ('league', 'cup', 'friendly', 'euro'));
 
 -- takım gücü: en iyi 16 oyuncunun ortalaması (gelişim dahil)
 create or replace function public._euro_power(p_team uuid) returns numeric
@@ -400,13 +396,3 @@ begin
     end loop;
   end if;
 end $$;
-
-revoke execute on function public._euro_power(uuid) from public, anon, authenticated;
-revoke execute on function public._team_lg(uuid) from public, anon, authenticated;
-revoke execute on function public._euro_slots(text) from public, anon, authenticated;
-revoke execute on function public._euro_prize(uuid, bigint, text) from public, anon, authenticated;
-revoke execute on function public._gen_euro(uuid, int) from public, anon, authenticated;
-revoke execute on function public._euro_tie(uuid, int, int, uuid, uuid, int, int) from public, anon, authenticated;
-revoke execute on function public._resolve_euro(uuid) from public, anon, authenticated;
-revoke execute on function public.euro_table(uuid) from public, anon;
-grant execute on function public.euro_table(uuid) to authenticated;
