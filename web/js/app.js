@@ -971,7 +971,7 @@ const TRAIN_FOCUS = [
 const TRAIN_INT = [
   ['Hafif', 'Kondisyon +26/hafta, sakatlık yok, moral yükselir; gelişim ×0.6.'],
   ['Normal', 'Kondisyon +20/hafta, %4 sakatlık ihtimali; gelişim ×1.'],
-  ['Yoğun', 'Kondisyon +14/hafta, %12 sakatlık ihtimali, moral düşer; gelişim ×1.4.'],
+  ['Yoğun', 'Kondisyon +14/hafta, %9 sakatlık ihtimali, moral düşer; gelişim ×1.4.'],
 ];
 const trainBase = (age) => (age <= 20 ? 4 : age <= 23 ? 3 : age <= 26 ? 1.5 : 0);
 function renderAntrenman() {
@@ -998,7 +998,7 @@ function renderAntrenman() {
     <div class="seg wide tr" id="trInt">${TRAIN_INT.map(([l], i) => `<button type="button" data-v="${i}" class="${tr.int === i ? 'on' : ''}" ${has ? '' : 'disabled'}>${l}</button>`).join('')}</div>
     <p class="muted small">${esc(TRAIN_INT[tr.int][1])}</p>
     <p class="small">Takımın ortalama kondisyonu: <b>%${fit}</b> ${fitBar(fit)}</p>
-    <p class="muted small">Antrenman her hafta sonunda işler. 26 yaş ve altı oyuncular gelişim puanı toplar (genç olan daha hızlı); 100 puanda <b>+1 güç</b> ve değer %6 artar. Potansiyele ulaşan ya da sakat oyuncu gelişmez.</p>
+    <p class="muted small">Antrenman her hafta sonunda işler. 26 yaş ve altı oyuncular gelişim puanı toplar (genç olan daha hızlı); maçta oynayan gençler ek puan alır (23 yaş ve altı +3). 100 puanda <b>+1 güç</b> ve değer %6 artar. Potansiyele ulaşan ya da sakat oyuncu gelişmez. Kadronun en iyi 14'ünden maç bulamayanların morali düşer.</p>
   </section>
   <section class="card"><h2>Gelişim</h2>
     ${young.length ? `<div class="list">${young.map((p) => `<div class="prow" data-pid="${p.id}">${ovrBadge(p.ovr)}<div class="pmain"><b>${esc(p.name)}</b><small>${p.age} yaş · ${GROUPS[p.grp]} · potansiyel ${p.pot}</small>
@@ -1192,6 +1192,25 @@ function activeOffersFor(pid) { return S.offers.filter((o) => o.player_id === pi
 function reserved(exceptPid) {
   return S.offers.filter((o) => o.bidder === me()?.id && o.status === 'active' && o.player_id !== exceptPid).reduce((a, o) => a + Number(o.amount), 0);
 }
+// gözlemci raporu: başka takımın / YZ kulübünün oyuncusu kadroma ne katar
+function scoutReport(p) {
+  const t = me();
+  if (!t || S.game?.status === 'lobby') return '';
+  const same = [...S.own.values()].filter((x) => x.team_id === t.id).map((x) => pv(x.player_id)).filter((x) => x && x.grp === p.grp).sort((a, b) => b.ovr - a.ovr);
+  const starters = same.filter((x) => (t.lineup || []).includes(x.id));
+  const weakest = starters.length ? starters[starters.length - 1] : null;
+  const notes = [];
+  let stars;
+  if (!same.length || p.ovr > same[0].ovr) { stars = 5; notes.push(same.length ? `${GROUPS[p.grp]} hattının en iyisi olur (şu anki en iyi: ${same[0].name} ${same[0].ovr}).` : `Bu mevkide hiç oyuncun yok.`); }
+  else if (weakest && p.ovr > weakest.ovr) { stars = 4; notes.push(`İlk 11'e girer: ${weakest.name} (${weakest.ovr}) yerine.`); }
+  else if (weakest && p.ovr >= weakest.ovr - 3) { stars = 3; notes.push('Rotasyon oyuncusu: ilk 11\'e yakın, yorgunluk ve sakatlıkta işe yarar.'); }
+  else { stars = 2; notes.push(`Kadrona katkısı az: ${GROUPS[p.grp]} hattında daha iyi ${same.filter((x) => x.ovr >= p.ovr).length} oyuncun var.`); }
+  if (p.age <= 23 && p.pot - p.ovr >= 6) { stars = Math.min(5, stars + 1); notes.push(`Gelecek vadediyor: ${p.age} yaşında, potansiyeli ${p.pot}. Antrenman ve maç süresiyle gelişir.`); }
+  else if (p.ovr >= p.pot) notes.push('Gelişimi tamamlanmış.');
+  if (p.age >= 32) { stars = Math.max(1, stars - 1); notes.push(`${p.age} yaşında: gelecek sezon düşüş ve emeklilik riski, değeri hızla erir.`); }
+  if (same.length >= 4 && stars <= 3) notes.push(`Bu mevkide zaten ${same.length} oyuncun var.`);
+  return `<div class="scout"><div class="row between"><b>🔎 Gözlemci raporu</b>${starsHTML(stars, 'mini')}</div><ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+}
 async function playerModal(pid) {
   await fetchPlayers([pid]);
   const p = pv(pid);
@@ -1215,6 +1234,7 @@ async function playerModal(pid) {
       <span>Değer: <b>${money(value)}</b>${owned?.bought_for > 0 ? ` · alış ${money(owned.bought_for)}` : ''}</span>
       <span>Maaş: <b>${money(owned?.wage || wageOf(value))}</b>/hafta${owned ? '' : ' (talep)'}</span>
     </div>
+    ${mine ? '' : scoutReport(p)}
     ${owned ? `<div class="pinfo">${statusBadges(owned)}<span>Kondisyon ${fitBar(owned.fitness)} %${owned.fitness}</span><span>Form <b>${Number(owned.form).toFixed(1)}</b></span>${owned.yellows ? `<span>🟨 ${owned.yellows}</span>` : ''}
       ${owned.morale !== undefined ? `<span>Moral ${MORALE(owned.morale)[0]} <b>${MORALE(owned.morale)[1]}</b></span>` : ''}${owned.contract !== undefined ? `<span>Sözleşme: <b>${contractTxt(owned.contract)}</b></span>` : ''}</div>` : ''}
     ${mine && owned.contract !== undefined && S.game.status !== 'lobby' ? `<div class="renew">
