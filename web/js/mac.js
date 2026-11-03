@@ -438,12 +438,17 @@ export async function openMatch(sb, fid, opts) {
     const lu = (e.s === 'h' ? startH : startA);
     const slot = lu.indexOf(e.p);
     return { m: e.m, s: e.s, p: e.p, a: e.a, ev: e.t, slot: slot > 0 ? slot : undefined, pen: !!e.pen, fk: !!e.fk, f: e.f, c: e.c, w: e.w,
+      k: e.ty || (typeof e.k === 'string' ? e.k : undefined), mm: e.mm,
       wslot: e.w && lu.indexOf(e.w) > 0 ? lu.indexOf(e.w) : undefined,
       fslot: e.f ? ((e.s === 'h' ? startA : startH).indexOf(e.f) > 0 ? (e.s === 'h' ? startA : startH).indexOf(e.f) : undefined) : undefined };
   });
   const startedAgo = fx.kickoff_at ? Date.now() - new Date(fx.kickoff_at) : Infinity;
-  const htMode = !fx.played && !!fx.stats?.ht; // ilk yarı oynandı, menajer karar verecek
-  let live = !htMode && !startAt && startedAgo >= 0 && startedAgo < liveMs;
+  const stNext = Number(fx.stats?.ht?.next ?? 46);
+  const htMode = !fx.played && !!fx.stats?.ht && stNext <= 46; // ilk yarı oynandı, menajer devre arası kararı verecek
+  const pendMode = !fx.played && !!fx.stats?.ht && stNext > 90; // ikinci yarı oynandı, izlerken müdahale edilebilir; bitince sonuçlanır
+  const mySide = myTeam && fx.home === myTeam ? 'h' : myTeam && fx.away === myTeam ? 'a' : null;
+  const canManage = (htMode || pendMode) && !!mySide && !!fx.stats?.snaps;
+  let live = !htMode && !pendMode && !startAt && startedAgo >= 0 && startedAgo < liveMs;
   const R = rng(fid * 2654435761);
   const SHOTS = ['goal', 'save', 'miss'];
   const sim = simulateMatch(fx, events, R, { h: teamStyle(H), a: teamStyle(A) });
@@ -537,6 +542,7 @@ export async function openMatch(sb, fid, opts) {
       <button class="btn sm" id="mNames" title="Oyuncu isimleri">Aa</button>
       <button class="btn sm" id="mNext" title="Sonraki an">⏩</button>
       <button class="btn sm" id="mEnd" title="Sona atla">⏭</button>
+      ${canManage ? '<button class="btn sm primary" id="mTac" title="Maça müdahale et">Müdahale</button>' : ''}
       ${document.fullscreenEnabled ? '<button class="btn sm" id="mFull" title="Tam ekran (yatay)">⛶</button>' : ''}
     </div>
     ${live ? '' : '<div class="seg sm mview" id="mView"><button data-v="ozet">Önemli anlar</button><button data-v="tam">Tam maç</button></div>'}
@@ -600,6 +606,7 @@ export async function openMatch(sb, fid, opts) {
       txt = `Faul: ${e.p ? nm(e.p) : 'savunmacı'}${e.w ? `, ${nm(e.w)}${trEk(names.get(e.w), 'acc')} düşürdü` : ''} · serbest vuruş`; cls = 'fk';
       if (!silent) flash('FAUL · SERBEST VURUŞ', { c1: '#111827', c2: '#f59e0b' });
     }
+    else if (e.ev === 'tac') { txt = `${esc(team?.name || '')} ${e.mm > 0 ? (e.mm >= 2 ? 'tam hücuma geçti' : 'hücuma ağırlık verdi') : e.mm < 0 ? 'skoru korumak için geri çekildi' : 'oyununu dengeledi'}`; cls = 'tac'; }
     else if (e.ev === 'offside') { txt = `Ofsayt${e.txt ? `: ${esc(e.txt)}` : ''} · yan hakem bayrağı kaldırdı`; cls = 'off'; if (!silent && phase === 'clip') flash('OFSAYT', { c1: '#111827', c2: '#fde047' }); }
     else if (e.ev === 'yellow') { txt = `${nm(e.p)}`; cls = 'yellow'; }
     else if (e.ev === 'red') { txt = `<b>Kırmızı kart!</b> ${nm(e.p)}`; cls = 'red'; if (!silent) flash(`KIRMIZI KART · ${names.get(e.p) || ''}`, { c1: '#dc2626', c2: '#ffffff' }); }
@@ -797,8 +804,10 @@ export async function openMatch(sb, fid, opts) {
     const carrier = u < 1.65 ? { s: k.s, i: k.slot } : null;
     return { ply, ball, carrier };
   }
+  let finSent = false;
   function finish() {
     if (ended) return;
+    if (pendMode && !finSent) { finSent = true; sb.rpc('finish_match', { p_game: fx.game_id }).then(() => {}, () => {}); }
     if (phase === 'pens') { pens.done = true; phase = 'gap'; }
     ended = true; endLive();
     replay = null; overlay(''); phaseLabel('');
@@ -878,9 +887,11 @@ export async function openMatch(sb, fid, opts) {
   };
   document.getElementById('mEnd').onclick = () => { pauseT = 0; if (htMode) { clock = 45; tm = Math.max(tm, 44.9); } else finish(); };
   document.getElementById('mClose').onclick = close;
+  const tacBtn = document.getElementById('mTac');
+  if (tacBtn) tacBtn.onclick = () => { if (ended || phase === 'pens') return; playing = false; document.getElementById('mPlay').textContent = '▶'; showHalftime('live'); };
   statsHtml();
-  if (startAt) { // ikinci yarı: ilk yarı olayları sessizce işlenir, saat 45'ten devam eder
-    clock = startAt; tm = startAt; htShown = true;
+  if (startAt) { // kaldığı dakikadan: önceki olaylar sessizce işlenir
+    clock = startAt; tm = startAt; htShown = startAt >= 45;
     while (shown < timeline.length && timeline[shown].t <= clock - 0.05) emit(timeline[shown++], true);
     while (ci < clips.length && clips[ci].from < clock) ci++; // ilk yarının önemli anları tekrar oynatılmaz
   }
@@ -895,13 +906,19 @@ export async function openMatch(sb, fid, opts) {
   try { if (localStorage.getItem('mac-mod') === '3d') document.querySelector('#mMode button[data-m="3d"]').click(); } catch { /* yok */ }
 
   // ---- devre arası paneli: takım konuşması, oyuncu değişikliği, oyun anlayışı, talimatlar ----
-  async function showHalftime() {
-    overlay(`<div class="ht"><small>DEVRE ARASI</small><b>${sh} - ${sa}</b></div>`);
-    const side = myTeam && fx.home === myTeam ? 'h' : myTeam && fx.away === myTeam ? 'a' : null;
+  async function showHalftime(kind = 'ht') {
+    const liveCh = kind === 'live';
+    const minute = Math.floor(clock);
+    // müdahalede: izlenen dakikadan sonraki ilk kayıt (değişiklikler oradan itibaren geçerli)
+    const snapKey = liveCh ? Object.keys(fx.stats?.snaps || {}).map(Number).filter((k) => k > minute).sort((a, b) => a - b)[0] : null;
+    if (liveCh && (snapKey === undefined || snapKey >= 89)) { overlay('<div class="ht"><small>MÜDAHALE</small><b>Maçın sonuna çok az kaldı</b></div>'); pauseT = 1.5; return; }
+    document.querySelector('#match .htpanel')?.remove();
+    if (!liveCh) overlay(`<div class="ht"><small>DEVRE ARASI</small><b>${sh} - ${sa}</b></div>`);
+    const side = mySide;
     const box = document.createElement('div'); box.className = 'htpanel card';
     document.querySelector('#match .mwrap')?.insertBefore(box, document.getElementById('mStats'));
     if (!side) { box.innerHTML = '<p class="center muted">Devre arası: menajer kararını veriyor…</p>'; return; }
-    const S = side.toUpperCase(), stt = fx.stats.ht, me = teamById.get(myTeam);
+    const S = side.toUpperCase(), stt = liveCh ? fx.stats.snaps[snapKey] : fx.stats.ht, me = teamById.get(myTeam);
     const lu = [...stt['lu' + S]], used = new Set(stt['used' + S]), reds = new Set(stt.reds || []), inj = new Set(stt.injured || []);
     const left = 3 - (stt['subs' + S] || 0), sl = slots(me?.formation || '4-4-2');
     const { data: sq } = await sb.from('squads').select('player_id,injury,ban').eq('team_id', myTeam);
@@ -912,15 +929,18 @@ export async function openMatch(sb, fid, opts) {
     const ins = { ...teamStyle(me) }, ins0 = { ...ins };
     const T = ['Sakin olun, planımıza sadık kalın.', 'Daha fazlasını istiyorum, uyanın!', 'Sizinle gurur duyuyorum, böyle devam.'];
     const segRow = (k, l, o) => `<div class="irow"><span>${l}</span><div class="seg sm" data-k="${k}">${o.map((x, i) => `<button type="button" data-v="${i}" class="${ins[k] === i ? 'on' : ''}">${x}</button>`).join('')}</div></div>`;
-    box.innerHTML = `<h2>⏸ Devre arası · ${sh} - ${sa}</h2>
-      <h3>Takım konuşması</h3><div class="col" id="htTalk">${T.map((x, i) => `<button class="btn" type="button" data-t="${i}">“${x}”</button>`).join('')}</div>
+    box.innerHTML = `<h2>⏸ ${liveCh ? `Müdahale · ${minute}'` : 'Devre arası'} · ${sh} - ${sa}</h2>
+      ${liveCh ? `<p class="small muted">Değişiklikler ${snapKey + 1}. dakikada oyuna girer; maç oradan yeni kararlarınla devam eder.</p>` : `<h3>Takım konuşması</h3><div class="col" id="htTalk">${T.map((x, i) => `<button class="btn" type="button" data-t="${i}">“${x}”</button>`).join('')}</div>`}
       <h3>Oyuncu değişikliği <small class="muted">(kalan hak ${left})</small></h3>
       <div class="htsubs">${lu.map((id, i) => `<div class="htrow"><span class="pos">${sl[i] || ''}</span><b>${esc(names.get(id) || '?')}</b>${reds.has(id) ? ' 🟥' : inj.has(id) ? ' 🚑' : ''}
         ${reds.has(id) || left <= 0 ? '' : `<select data-i="${i}"><option value="">—</option>${bench.filter((p) => p.grp === sl[i] || sl[i] === undefined).concat(bench.filter((p) => p.grp !== sl[i] && p.grp !== 'GK' && sl[i] !== 'GK')).map((p) => `<option value="${p.id}">${esc(p.name)} (${p.ovr}${p.grp !== sl[i] ? ', ' + p.grp : ''})</option>`).join('')}</select>`}</div>`).join('')}</div>
       <h3>Oyun anlayışı</h3><select id="htMent">${[-2, -1, 0, 1, 2].map((v) => `<option value="${v}" ${v === (me?.mentality ?? 0) ? 'selected' : ''}>${MENTALITY[v]}</option>`).join('')}</select>
       <h3>Talimatlar</h3><div class="instr" id="htIns">${segRow('press', 'Pres', ['Düşük', 'Normal', 'Yüksek'])}${segRow('tempo', 'Tempo', ['Yavaş', 'Normal', 'Hızlı'])}${segRow('width', 'Genişlik', ['Dar', 'Normal', 'Geniş'])}</div>
       <p class="small muted" id="htMsg">Konuşmanın etkisi skora göre değişir; ikinci yarı boyunca takımın gücünü etkiler.</p>
-      <button class="btn primary big" id="htGo" disabled>▶ İkinci yarıyı başlat</button>`;
+      <button class="btn primary big" id="htGo" ${liveCh ? '' : 'disabled'}>▶ ${liveCh ? 'Değişiklikleri uygula' : 'İkinci yarıyı başlat'}</button>
+      ${liveCh ? '<button class="btn ghost" id="htCancel" type="button">Vazgeç, maça dön</button>' : ''}`;
+    box.querySelector('#htCancel')?.addEventListener('click', () => { box.remove(); playing = true; document.getElementById('mPlay').textContent = '❚❚'; });
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     let talk = -1;
     box.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => { talk = Number(b.dataset.t); box.querySelectorAll('[data-t]').forEach((x) => x.classList.toggle('on', x === b)); box.querySelector('#htGo').disabled = false; }));
     box.querySelectorAll('#htIns .seg button').forEach((b) => (b.onclick = () => { ins[b.parentElement.dataset.k] = Number(b.dataset.v); b.parentElement.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); }));
@@ -929,7 +949,16 @@ export async function openMatch(sb, fid, opts) {
       box.querySelectorAll('select[data-i]').forEach((x) => { if (x.value) { const v = Number(x.value); if (!picked.has(v)) { nl[Number(x.dataset.i)] = v; picked.add(v); n++; } } });
       const msg = box.querySelector('#htMsg');
       if (n > left) { msg.textContent = `En fazla ${left} değişiklik yapabilirsin.`; return; }
-      e.target.disabled = true; e.target.textContent = 'İkinci yarı oynanıyor…';
+      e.target.disabled = true; e.target.textContent = liveCh ? 'Uygulanıyor…' : 'İkinci yarı oynanıyor…';
+      if (liveCh) {
+        try {
+          const { data: r, error } = await sb.rpc('match_change', { p_game: fx.game_id, p_minute: minute, p_mentality: Number(box.querySelector('#htMent').value), p_lineup: nl, p_press: ins.press, p_tempo: ins.tempo, p_width: ins.width });
+          if (error || !r?.ok) { msg.textContent = error?.message || r?.msg || 'Olmadı'; e.target.disabled = false; e.target.textContent = '▶ Değişiklikleri uygula'; return; }
+          msg.textContent = r.msg;
+          setTimeout(() => reopenAt(Math.max(1, clock)), 700);
+        } catch (err) { msg.textContent = String(err?.message || err); e.target.disabled = false; }
+        return;
+      }
       try {
         if (ins.press !== ins0.press || ins.tempo !== ins0.tempo || ins.width !== ins0.width) await sb.rpc('set_instr', { p_game: fx.game_id, p_press: ins.press, p_tempo: ins.tempo, p_width: ins.width });
         const { data: r, error } = await sb.rpc('play_second_half', { p_game: fx.game_id, p_talk: talk, p_mentality: Number(box.querySelector('#htMent').value), p_lineup: nl });
@@ -939,11 +968,12 @@ export async function openMatch(sb, fid, opts) {
       } catch (err) { msg.textContent = String(err?.message || err); e.target.disabled = false; }
     };
   }
-  function reopenSecondHalf() {
+  function reopenSecondHalf() { reopenAt(45); }
+  function reopenAt(m) {
     closed = true; cancelAnimationFrame(raf); clearTimeout(waitTimer);
     if (onResize) window.removeEventListener('resize', onResize);
     r3d?.dispose();
-    openMatch(sb, fid, { ...opts, startAt: 45 });
+    openMatch(sb, fid, { ...opts, startAt: m });
   }
   function close() {
     closed = true;

@@ -406,7 +406,7 @@ async function reload() {
       sb.from('teams').select('*').eq('game_id', id).order('created_at'),
       sb.from('squads').select('*').eq('game_id', id),
       sb.from('offers').select('*').eq('game_id', id).order('created_at', { ascending: false }).limit(300),
-      sb.from('fixtures').select('id,comp,round,cup_round,leg,tie,home,away,hg,ag,pens,played,winner,kickoff_at,ht:stats->ht->>vh').eq('game_id', id).order('round').order('kickoff_at', { nullsFirst: false }).order('id'),
+      sb.from('fixtures').select('id,comp,round,cup_round,leg,tie,home,away,hg,ag,pens,played,winner,kickoff_at,ht:stats->ht->>vh,htn:stats->ht->>next').eq('game_id', id).order('round').order('kickoff_at', { nullsFirst: false }).order('id'),
       sb.from('news').select('*').eq('game_id', id).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(80),
     ]);
     for (const r of [g, t, q, o, f, n]) if (r.error) throw r.error;
@@ -527,8 +527,35 @@ function updateHeader() {
   const sub = t ? `${esc(t.name)}${S.game.status === 'lobby' ? ' · lobi' : ` · <b>${money(t.budget)}</b>`}${S.game.status === 'active' ? ` · ${(S.game.season || 1) > 1 ? `S${S.game.season} ` : ''}${S.game.current_round}. hafta` : ''}` : '';
   setHeader(`${t ? `<span class="hcrest">${crestSVG(t, 30)}</span>` : ''}<span>${esc(S.game.name)}</span>`, sub);
 }
+function jobCards(ids, title, sub) {
+  const ranked = leagueTeams().map((t) => ({ id: t.id, p: teamPower(t.id) })).sort((a, b) => b.p - a.p);
+  return `<section class="card jobs"><h2>${title}</h2><p class="small muted">${sub}</p>
+    <div class="list">${ids.map((id) => { const t = S.teamById.get(id); if (!t) return ''; const rk = ranked.findIndex((x) => x.id === id) + 1;
+      const pos = S.standings.findIndex((x) => x.team_id === id) + 1;
+      return `<div class="lrow">${teamDot(t, 30)}<div class="grow"><b>${esc(t.name)}</b><small>Kadro gücü ${rk}./${ranked.length}${pos ? ` · ligde ${pos}.` : ''} · ${starsHTML(leagueStarsN(rk, ranked.length), 'mini')}</small></div>
+        <button class="btn primary sm" data-job="${id}">Kabul et</button></div>`; }).join('')}</div></section>`;
+}
+function bindJobs() {
+  $$('[data-job]').forEach((b) => (b.onclick = async () => {
+    const t = S.teamById.get(b.dataset.job);
+    if (!(await confirmBox(`${t?.name || 'Bu kulüp'} menajeri olmak istiyor musun?`, 'Kabul et'))) return;
+    const r = await act('take_job', { p_game: S.gameId, p_team: b.dataset.job });
+    if (r?.ok) { S.tab = 'ozet'; renderGame(); }
+  }));
+}
+function renderJobless() {
+  const jl = S.game.settings.jobless;
+  $('#nav').innerHTML = '';
+  setAccent(null); setScreen('ozet');
+  view().innerHTML = `
+  <section class="card champ"><h2>Görevden alındın</h2><p>Yönetim seninle yollarını ayırdı. Kariyerine devam etmek için bir teklifi kabul et.</p></section>
+  ${jl?.teams?.length ? jobCards(jl.teams, 'İş teklifleri', 'Bu kulüpler seninle çalışmak istiyor. Kabul ettiğin kulübün kadrosunu ve bütçesini devralırsın.') : '<section class="card"><p class="muted">Şu an teklif yok.</p></section>'}
+  <section class="card"><h2>Haberler</h2>${S.news.slice(0, 12).map(newsItem).join('')}</section>`;
+  bindJobs();
+}
 function renderGame() {
   if (!S.game) return;
+  if (isCareer() && !me() && S.game.status !== 'lobby') { updateHeader(); return renderJobless(); }
   updateHeader();
   setAccent(me());
   setScreen(S.game.status === 'lobby' ? 'lobby' : S.tab);
@@ -698,6 +725,14 @@ function boardInfo() {
   const pts = formOf(me().id).reduce((a, r) => a + (r === 'G' ? 3 : r === 'B' ? 1 : 0), 0);
   let conf = 60;
   if (played) conf = Math.max(3, Math.min(99, 60 + (target - pos) * 6 + (pts - 7) * 3));
+  const sb0 = S.game?.settings?.board;
+  if (sb0 && sb0.team === me().id && Number(sb0.season) === Number(S.game.season || 1)) {
+    const t2 = Number(sb0.target), n2 = Number(sb0.n) || n;
+    conf = Math.round(Number(sb0.conf));
+    const label2 = t2 === 1 ? 'Şampiyonluk' : t2 <= Math.ceil(n2 * 0.25) ? `İlk ${t2}` : t2 <= Math.ceil(n2 / 2) ? `İlk ${t2} (üst yarı)` : t2 < n2 - 2 ? `Orta sıralar (ilk ${t2})` : 'Ligde kalmak';
+    const mood2 = conf >= 80 ? 'Çok memnun' : conf >= 60 ? 'Memnun' : conf >= 40 ? 'Endişeli' : conf >= 20 ? 'Huzursuz' : 'Sabrı tükeniyor';
+    return { rank: Number(sb0.rank) || rank, n: n2, target: t2, label: label2, pos, played, conf, mood: mood2, real: true, warned: Number(sb0.warned) || 0 };
+  }
   const mood = conf >= 80 ? 'Çok memnun' : conf >= 60 ? 'Memnun' : conf >= 40 ? 'Endişeli' : conf >= 20 ? 'Huzursuz' : 'Sabrı tükeniyor';
   return { rank, n, target, label, pos, played, conf, mood };
 }
@@ -835,7 +870,9 @@ function renderOzet() {
   view().innerHTML = `
   ${S.game.status === 'finished' ? `<section class="card champ">🏆 ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''} ${S.game.euro?.champion ? `· Avrupa: <b>${esc(tname(S.game.euro.champion))}</b>` : ''}
     ${isOwner() ? `<button class="btn primary big" id="btnSeason" style="margin-top:10px">▶ ${(S.game.season || 1) + 1}. sezonu başlat</button><p class="small">Oyuncular bir yaş büyür; gençler gelişir, yaşlılar düşer, bazıları emekli olur. Kadrolar ve bütçeler kalır.</p>` : '<p class="small">Yeni sezonu oda sahibi başlatır.</p>'}</section>` : ''}
-  ${(() => { const p = mine.find((f) => !f.played && f.ht != null); return p ? `<section class="card press"><h2>⏸ Devre arası</h2><p>${esc(tname(p.home))} <b>${p.hg ?? 0} - ${p.ag ?? 0}</b> ${esc(tname(p.away))}</p><p class="small muted">İkinci yarı senin kararını bekliyor: takım konuşması, değişiklik, taktik.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Soyunma odasına git</button></section>` : ''; })()}
+  ${S.game.status === 'finished' && isCareer() && S.game.settings.job_offers && Number(S.game.settings.job_offers.season) === Number(S.game.season || 1) ? jobCards(S.game.settings.job_offers.teams || [], 'İş teklifleri', 'Başarın dikkat çekti. Yeni sezona başlamadan bu kulüplerden birine geçebilirsin; geçmezsen teklifler düşer.') : ''}
+  ${(() => { const p = mine.find((f) => !f.played && f.ht != null); return p && Number(p.htn) > 90 ? `<section class="card press"><h2>⏯ Maçın sürüyor</h2><p>${esc(tname(p.home))} – ${esc(tname(p.away))}</p><p class="small muted">Maçı izlemeyi bitirmedin. İzlerken istediğin anda müdahale edebilirsin; "Devam et" dersen maç olduğu gibi sonuçlanır.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Maça dön</button></section>`
+      : p ? `<section class="card press"><h2>⏸ Devre arası</h2><p>${esc(tname(p.home))} <b>${p.hg ?? 0} - ${p.ag ?? 0}</b> ${esc(tname(p.away))}</p><p class="small muted">İkinci yarı senin kararını bekliyor: takım konuşması, değişiklik, taktik.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Soyunma odasına git</button></section>` : ''; })()}
   ${pressCard(t, mine)}
   ${live.length ? `<section class="card live-card"><h2>🔴 Şu an canlı</h2>${live.map((f) => fxRow(f)).join('')}</section>` : ''}
   <section class="card hero">
@@ -866,7 +903,9 @@ function renderOzet() {
     if (!b || S.game.status === 'lobby') return '';
     return `<section class="card board"><div class="row between"><h2>Yönetim</h2><small>${b.mood}</small></div>
       <p class="small">Sezon hedefi: <b>${b.label}</b> <span class="muted">(kadro gücünde ${b.rank}./${b.n})</span>${b.played ? ` · şu an <b>${b.pos}.</b>` : ''}</p>
-      <div class="conf"><i style="width:${b.conf}%" class="${b.conf >= 60 ? 'hi' : b.conf >= 35 ? 'mid' : 'lo'}"></i></div><small>Yönetim güveni %${b.conf}</small></section>`;
+      <div class="conf"><i style="width:${b.conf}%" class="${b.conf >= 60 ? 'hi' : b.conf >= 35 ? 'mid' : 'lo'}"></i></div><small>Yönetim güveni %${b.conf}</small>
+      ${b.real && b.warned >= 2 ? '<p class="small warn">Son uyarı: sonuçlar düzelmezse görevden alınacaksın.</p>' : b.real && b.warned === 1 ? '<p class="small warn">Yönetim sonuçlardan memnun değil.</p>' : ''}
+      ${b.real ? '<p class="small muted">Güven her hafta sonuçlara ve hedefe göre değişir; çok düşerse kovulursun.</p>' : ''}</section>`;
   })()}
   ${active && nextR && isCareer() ? `
   <section class="card"><button class="btn primary big" id="btnNext">▶ Devam et — ${nextR}. hafta (${roundFx.length} maç)</button>
@@ -918,6 +957,7 @@ function renderOzet() {
     const r = await act('answer_press', { p_game: S.gameId, p_choice: Number(b.dataset.press) }, { quiet: true });
     if (!r?.ok) $$('[data-press]').forEach((x) => (x.disabled = false)); else renderGame();
   }));
+  bindJobs();
   $('#btnSeason') && ($('#btnSeason').onclick = async () => {
     if (!(await confirmBox(`${(S.game.season || 1) + 1}. sezon başlasın mı?`, 'Başlat'))) return;
     await act('new_season', { p_game: S.gameId }); renderGame();

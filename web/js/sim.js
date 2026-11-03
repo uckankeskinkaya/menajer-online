@@ -16,7 +16,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 
 export function simulateMatch(fx, events, R, ins = {}) {
-  const IN = { h: { press: 1, tempo: 1, width: 1, ...(ins.h || {}) }, a: { press: 1, tempo: 1, width: 1, ...(ins.a || {}) } };
+  // takım taktikleri: sunucunun maçta kullandığı (stats.tH/tA) varsa o, yoksa takımın tarzı
+  const IN = { h: { press: 1, tempo: 1, width: 1, ment: 0, ...(ins.h || {}), ...(fx.stats?.tH || {}) }, a: { press: 1, tempo: 1, width: 1, ment: 0, ...(ins.a || {}), ...(fx.stats?.tA || {}) } };
   const fh = fx.stats?.fh || '4-4-2', fa = fx.stats?.fa || '4-4-2';
   // rol: yanal konum (fx 0..1, ev sahibine göre) ve derinlik (r: 0 defans → 1 forvet)
   const role = (f) => slotPositions(f).map((p) => ({ fx: p.x, r: clamp((0.78 - p.y) / 0.58, 0, 1) }));
@@ -40,7 +41,9 @@ export function simulateMatch(fx, events, R, ins = {}) {
     e.T = Math.max((e.m - 0.5 + R() * 0.4) * SPM, last + gap, e.pen ? 12 : 9);
     e.shooter = J(e.s, e.slot ?? (8 + Math.floor(R() * 3)));
     const u = R(), cw = (IN[e.s].width - 1) * 0.1;
-    e.style = rebound ? 'rebound' : e.pen ? 'pen' : e.fk ? 'fk' : u < 0.12 ? 'corner' : u < 0.38 + cw ? 'cross' : u < 0.55 + cw * 0.5 ? 'long' : 'thru';
+    // sunucunun atak türü (taktiğe göre seçildi) varsa onu oyna
+    const kt = e.k === 'cross' ? (u < 0.3 ? 'corner' : 'cross') : e.k === 'thru' || e.k === 'combo' ? 'thru' : e.k === 'long' ? 'long' : null;
+    e.style = rebound ? 'rebound' : e.pen ? 'pen' : e.fk ? 'fk' : kt || (u < 0.12 ? 'corner' : u < 0.38 + cw ? 'cross' : u < 0.55 + cw * 0.5 ? 'long' : 'thru');
     if (rebound) prev.parryTo = e;
     last = e.T; prev = e;
   }
@@ -137,12 +140,14 @@ export function simulateMatch(fx, events, R, ins = {}) {
       const safe = clamp((gap - 0.9) / 3.2, 0.03, 1);
       const open = clamp(dist(P[nearest(other(s), P[j], false)], P[j]) / 6, 0.15, 1.2);
       const gain = g - g0;
-      const kz = g0 < 35 ? 0.025 : g0 < 70 ? 0.055 : 0.04;
+      const kz = (g0 < 35 ? 0.025 : g0 < 70 ? 0.055 : 0.04) * [0.6, 1, 1.5][IN[s].tempo]; // sabırlı / dengeli / direkt
       let w = safe * safe * open * (1 + Math.max(0, gain) * kz * (counter ? 2 : 1) * (push ? 1.4 : 1));
-      if (gain < -4) w *= counter ? 0.15 : push ? 0.3 : 0.6;
+      if (gain < -4) w *= counter ? 0.15 : IN[s].tempo === 0 ? 0.7 : push ? 0.3 : 0.6; // sabırlı oyun topu geri de oynar
       if (g0 > PL * 0.6 && gain < -8) w *= Math.abs(P[j].x - PW / 2) < 18 ? 0.08 : 0.3; // hücumda topu geri, göbeğe atma
       w *= d < 8 ? 0.7 : d <= 30 ? 1 : 0.65;
       if (late) w *= 1.8; // savunma arkasına koşu cazip görünür
+      { const wideJ = Math.abs(P[j].x - PW / 2) > 19; // kanat oyunu kanatlara, dar oyun merkeze
+        w *= IN[s].width === 2 ? (wideJ ? 1.7 : 0.8) : IN[s].width === 0 ? (wideJ ? 0.6 : 1.25) : 1; }
       if (j === gotFrom[from]) w *= 0.3; // az önce pası veren oyuncuya hemen geri verme
       w *= 0.85 + R() * 0.3;
       if (w > bw) { bw = w; best = j; }
@@ -526,7 +531,8 @@ export function simulateMatch(fx, events, R, ins = {}) {
     const blk = {};
     for (const s of ['h', 'a']) {
       const own = ps === s, bg = G(s, bym), pr = IN[s].press - 1, wd = IN[s].width - 1;
-      const line = own ? clamp(bg - 18, 16, 64) : clamp(bg - 18 + pr * 6, 9, 36 + pr * 8);
+      const mt = IN[s].ment || 0;
+      const line = own ? clamp(bg - 18 + mt * 3, 16, 66) : clamp(bg - 18 + pr * 6 + mt * 3, 8, 38 + pr * 8);
       blk[s] = { own, line, len: own ? 40 : 26 - pr * 3, wid: own ? 0.95 * (1 + wd * 0.07) : 0.66, sh: own ? 0.2 : 0.42, off: offLine(s) };
     }
     let p1 = -1, p2 = -1;
