@@ -102,3 +102,6 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4q | Arayüz yenilendi (TEMA v2): kulüp renginde vurgu, oyun menüsü tipografisi, yatay ekran/tablet/masaüstü için yan menü ve sütunlu panolar; form rozeti hatası ve eksik oyuncu verisinde çökme düzeltildi | ✅ |
 | 4r | Maç sahası her ekranda yatay ve geniş (tribünlü, açık çim), yatay ekranda tam yükseklik, tam ekran (yatay kilit) düğmesi | ✅ |
 | 4s | Maç görüntüsü: ofsayt kuralı (yan hakem, serbest vuruş, akış + istatistik), pas mantığı (kapalı hatta pas %42 → %19, aynı kişiye geri pas %18 → %6, ofsaytta top alma %5.8 → %0.6), kontra hücum ve daha hızlı tempo | ✅ |
+| 4t | Yönetim güveni gerçek: uyarı, kovulma, iş teklifleri (kovulunca küçük, başarılı sezonda büyük kulüplerden) | ✅ |
+| 4u | Gerçekçi taktikler: atak türleri taktiğe, başarı oyuncu eşleşmesine bağlı; YZ rakibe göre taktik seçer ve maç içinde skora göre değiştirir; görüntü atak türünü oynar | ✅ |
+| 4v | Maç içi müdahale: kariyer maçında istediğin an değişiklik/oyun anlayışı/talimat (5 dk içinde oyuna girer) | ✅ |
