@@ -603,3 +603,19 @@ label { font-weight: 600; }
 .mode-card b { font-size: clamp(18px, 5.4vw, 30px); }
 .v-home .mode-card.quick b { font-size: clamp(26px, 7vw, 34px); }
 @media (min-width: 900px) { .mk-side .row2 { flex-direction: column; } .mk-side .row2 > * { flex: none; } }
+/* maç: saha hep yatay ve geniş */
+.mstage, .mstage.is3d { aspect-ratio: 1.62; max-height: none; width: 100%; background: #4c9a3c; border-radius: 8px; }
+.mwrap { max-width: 1400px; }
+.mwrap:not(.land) { max-width: 760px; }
+.mwrap.land .mstage, .mwrap.land .mstage.is3d { aspect-ratio: auto; height: calc(100dvh - 132px); min-height: 220px; max-height: none; max-width: none; width: 100%; }
+@media (orientation: landscape) and (max-height: 520px) { .mwrap.land .mstage, .mwrap.land .mstage.is3d { height: calc(100dvh - 104px); } }
+.match:fullscreen { overflow: auto; background: var(--bg); }
+.mctrl { gap: 6px; } .mctrl .btn.sm { padding: 7px 10px; }
+.mctrl { flex-wrap: wrap; justify-content: space-between; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .mwrap.land .mstage, .mwrap.land .mstage.is3d { height: calc(100dvh - 92px); }
+  .mwrap.land .mposs { height: 16px; } .mwrap.land .mposs i { font-size: 11px; }
+  .mwrap.land .mctrl .btn, .mwrap.land .mctrl .seg button { min-height: 30px; padding-top: 4px; padding-bottom: 4px; }
+}
+@media (orientation: landscape) and (max-height: 520px) { .mwrap.land .mstage, .mwrap.land .mstage.is3d { height: calc(100dvh - 112px); } }
+@media (max-width: 440px) { .mctrl { gap: 4px; } .mctrl .btn.sm { padding: 6px 7px; } .mctrl .seg.sm button { padding: 6px 6px; } }
