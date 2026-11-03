@@ -935,10 +935,11 @@ function renderOzet() {
 // ---------------- kadro + taktik ----------------
 function renderKadro() {
   const sub = S.sub.kadro || 'kadro';
-  view().innerHTML = `<div class="seg wide" id="kSeg"><button data-s="kadro" class="${sub === 'kadro' ? 'on' : ''}">Kadro</button><button data-s="taktik" class="${sub === 'taktik' ? 'on' : ''}">Taktik</button><button data-s="finans" class="${sub === 'finans' ? 'on' : ''}">Finans</button></div><div id="kBody"></div>`;
+  view().innerHTML = `<div class="seg wide" id="kSeg"><button data-s="kadro" class="${sub === 'kadro' ? 'on' : ''}">Kadro</button><button data-s="taktik" class="${sub === 'taktik' ? 'on' : ''}">Taktik</button><button data-s="antrenman" class="${sub === 'antrenman' ? 'on' : ''}">Antrenman</button><button data-s="finans" class="${sub === 'finans' ? 'on' : ''}">Finans</button></div><div id="kBody"></div>`;
   $$('#kSeg button').forEach((b) => (b.onclick = () => { S.sub.kadro = b.dataset.s; renderKadro(); }));
   if (sub === 'taktik') return renderTaktik();
   if (sub === 'finans') return renderFinans();
+  if (sub === 'antrenman') return renderAntrenman();
   const t = me();
   const sq = [...S.own.values()].filter((x) => x.team_id === t.id).map((x) => pv(x.player_id));
   const order = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -958,6 +959,59 @@ function renderKadro() {
   </section>`;
   $$('#kBody .prow').forEach((r) => (r.onclick = () => playerModal(Number(r.dataset.pid))));
   $$('#kView button').forEach((b) => (b.onclick = () => { S.sub.kview = b.dataset.v; renderKadro(); }));
+}
+// ---------------- antrenman ----------------
+const TRAIN_FOCUS = [
+  ['genel', 'Genel', 'Herkes biraz gelişir (×1.1).', null],
+  ['hucum', 'Hücum', 'Forvetler hızlı gelişir (×1.4), diğerleri yavaş.', 'FWD'],
+  ['ortasaha', 'Orta saha', 'Orta sahalar hızlı gelişir (×1.4), diğerleri yavaş.', 'MID'],
+  ['savunma', 'Savunma', 'Defans ve kaleciler hızlı gelişir (×1.4), diğerleri yavaş.', 'DEF'],
+  ['fizik', 'Fizik', 'Daha çok dinlenme (+4 kondisyon), antrenman sakatlığı yarıya iner; gelişim yavaş.', null],
+];
+const TRAIN_INT = [
+  ['Hafif', 'Kondisyon +26/hafta, sakatlık yok, moral yükselir; gelişim ×0.6.'],
+  ['Normal', 'Kondisyon +20/hafta, %4 sakatlık ihtimali; gelişim ×1.'],
+  ['Yoğun', 'Kondisyon +14/hafta, %12 sakatlık ihtimali, moral düşer; gelişim ×1.4.'],
+];
+const trainBase = (age) => (age <= 20 ? 4 : age <= 23 ? 3 : age <= 26 ? 1.5 : 0);
+function renderAntrenman() {
+  const t = me();
+  const has = t && Object.prototype.hasOwnProperty.call(t, 'training');
+  const tr = { focus: 'genel', int: 1, ...(t?.training || {}) };
+  const fo = TRAIN_FOCUS.find((x) => x[0] === tr.focus) || TRAIN_FOCUS[0];
+  const sq = [...S.own.values()].filter((x) => x.team_id === t.id).map((x) => pv(x.player_id));
+  const fit = sq.length ? Math.round(sq.reduce((a, p) => a + (p.sq.fitness ?? 100), 0) / sq.length) : 0;
+  const weekly = (p) => {
+    if (p.ovr >= p.pot || p.sq.injury > 0) return 0;
+    const fm = tr.focus === 'genel' ? 1.1 : fo[3] && (p.grp === fo[3] || (fo[3] === 'DEF' && p.grp === 'GK')) ? 1.4 : 0.9;
+    return Math.round(trainBase(p.age) * [0.6, 1, 1.4][tr.int] * fm);
+  };
+  const young = sq.filter((p) => p.ovr < p.pot && trainBase(p.age) > 0).sort((a, b) => (b.sq.xp || 0) - (a.sq.xp || 0) || a.age - b.age);
+  $('#kBody').innerHTML = `
+  <section class="card">
+    <h2>Haftalık program</h2>
+    ${has ? '' : '<p class="warn small">Antrenman sunucu güncellemesinden sonra açılacak.</p>'}
+    <small class="ihead">Odak</small>
+    <div class="seg wide tr" id="trFocus">${TRAIN_FOCUS.map(([k, l]) => `<button type="button" data-v="${k}" class="${tr.focus === k ? 'on' : ''}" ${has ? '' : 'disabled'}>${l}</button>`).join('')}</div>
+    <p class="muted small">${esc(fo[2])}</p>
+    <small class="ihead">Yoğunluk</small>
+    <div class="seg wide tr" id="trInt">${TRAIN_INT.map(([l], i) => `<button type="button" data-v="${i}" class="${tr.int === i ? 'on' : ''}" ${has ? '' : 'disabled'}>${l}</button>`).join('')}</div>
+    <p class="muted small">${esc(TRAIN_INT[tr.int][1])}</p>
+    <p class="small">Takımın ortalama kondisyonu: <b>%${fit}</b> ${fitBar(fit)}</p>
+    <p class="muted small">Antrenman her hafta sonunda işler. 26 yaş ve altı oyuncular gelişim puanı toplar (genç olan daha hızlı); 100 puanda <b>+1 güç</b> ve değer %6 artar. Potansiyele ulaşan ya da sakat oyuncu gelişmez.</p>
+  </section>
+  <section class="card"><h2>Gelişim</h2>
+    ${young.length ? `<div class="list">${young.map((p) => `<div class="prow" data-pid="${p.id}">${ovrBadge(p.ovr)}<div class="pmain"><b>${esc(p.name)}</b><small>${p.age} yaş · ${GROUPS[p.grp]} · potansiyel ${p.pot}</small>
+      <span class="xpbar"><i style="width:${Math.min(100, p.sq.xp || 0)}%"></i></span></div><div class="pside"><b>${p.sq.xp || 0}/100</b><small>+${weekly(p)}/hf</small></div></div>`).join('')}</div>`
+      : '<p class="muted">Gelişebilecek genç oyuncun yok.</p>'}
+  </section>`;
+  const save = async (focus, int) => {
+    const r = await act('set_training', { p_game: S.gameId, p_focus: focus, p_intensity: int }, { quiet: true });
+    if (r?.ok) { t.training = { focus, int }; renderKadro(); }
+  };
+  $$('#trFocus button').forEach((b) => (b.onclick = () => save(b.dataset.v, tr.int)));
+  $$('#trInt button').forEach((b) => (b.onclick = () => save(tr.focus, Number(b.dataset.v))));
+  $$('#kBody .prow').forEach((r) => (r.onclick = () => playerModal(Number(r.dataset.pid))));
 }
 // ---------------- finans (FM tarzı) ----------------
 const wageOf = (v) => Math.max(2000, Math.round((Number(v) * 0.0022) / 1000) * 1000);
@@ -1057,7 +1111,7 @@ function renderTaktik() {
       }).join('')}
     </div>
     ${bad.length ? `<p class="warn small">⚠️ İlk 11'de oynayamayacak oyuncu var (${bad.map((id) => esc(pv(id).name)).join(', ')}). Değiştirmezsen maçta yerine kenardan en iyisi oynar.</p>` : ''}
-    <p class="muted small">Oyuncuya dokunup değiştir. Kırmızı: mevkisi dışında (%15 güç kaybı, kalecide %50). Çubuk: kondisyon — yorgun oyuncu daha zayıf oynar, her gün %15 dinlenir.</p>
+    <p class="muted small">Oyuncuya dokunup değiştir. Kırmızı: mevkisi dışında (%15 güç kaybı, kalecide %50). Çubuk: kondisyon — yorgun oyuncu daha zayıf oynar; haftalık dinlenme antrenman yoğunluğuna bağlı.</p>
     <div class="row">
       <button class="btn" id="tAuto">En iyi 11</button>
       <button class="btn primary grow" id="tSave" ${changed ? '' : 'disabled'}>${changed ? 'Taktiği kaydet' : 'Kaydedildi'}</button>
