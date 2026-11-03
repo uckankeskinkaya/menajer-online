@@ -95,3 +95,4 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4j | Moral + basın toplantısı, sözleşmeler (uzatma / bedelsiz ayrılık), altyapıdan genç oyuncular | ✅ |
 | 4k | Devre arası kararları (kariyer): maç 45'te durur, takım konuşması, değişiklik, oyun anlayışı, talimat | ✅ |
 | 4l | Kariyerde Avrupa kupası: lig ilk 2-4'ü + Avrupa devleri, 4 grup + rövanşlı eleme + final, ödüller, Lig → Avrupa sekmesi, kupa dolabında Avrupa | ✅ |
+| 4m | Antrenman: haftalık odak (genel/hücum/orta saha/savunma/fizik) + yoğunluk; gençler gelişim puanıyla güçlenir, yoğunlukta sakatlık/moral bedeli (Kadro → Antrenman) | ✅ |
