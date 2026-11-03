@@ -416,6 +416,11 @@ async function reload() {
       const { data, error } = await sb.rpc('standings', { p_game: id });
       if (!error) S.standings = data;
     }
+    S.euroTable = [];
+    if (S.game?.euro?.groups) {
+      const { data, error } = await sb.rpc('euro_table', { p_game: id });
+      if (!error) S.euroTable = data;
+    }
     if (S.game?.status !== 'lobby') {
       const { data, error } = await sb.rpc('player_stats', { p_game: id });
       if (!error) { S.pstats = new Map(data.map((x) => [x.player_id, x])); await fetchPlayers(data.map((x) => x.player_id)); }
@@ -442,6 +447,10 @@ function windowOpen() {
   return S.game.current_round === 0 || S.game.current_round === half;
 }
 const hasCup = () => ['cup', 'league_cup'].includes(S.game?.settings?.format);
+const hasEuro = () => !!S.game?.euro?.groups;
+const leagueTeams = () => S.teams.filter((x) => !x.guest); // misafir (sadece Avrupa'da oynayan) kulüpler hariç
+const EURO_ST = ['Grup', 'Çeyrek final', 'Yarı final', 'Final'];
+const compLabel = (f) => f.comp === 'cup' ? `Kupa ${f.cup_round}. tur` : f.comp === 'euro' ? `Avrupa · ${f.cup_round === 0 ? `${String.fromCharCode(64 + f.tie)} Grubu ${f.leg}. maç` : EURO_ST[f.cup_round] + (f.cup_round < 3 ? (f.leg === 2 ? ' rövanş' : ' ilk maç') : '')}` : `${f.round}. hafta`;
 
 let reloadTimer;
 async function subscribe(id) {
@@ -664,7 +673,7 @@ function formOf(id, n = 5) {
 const formHTML = (arr) => `<span class="form">${arr.map((r) => `<i class="f-${r}">${r}</i>`).join('')}</span>`;
 function boardInfo() {
   if (!hasLeague() || !me()) return null;
-  const ranked = S.teams.map((t) => ({ id: t.id, p: teamPower(t.id) })).sort((a, b) => b.p - a.p);
+  const ranked = leagueTeams().map((t) => ({ id: t.id, p: teamPower(t.id) })).sort((a, b) => b.p - a.p);
   const n = ranked.length, rank = ranked.findIndex((x) => x.id === me().id) + 1;
   const target = rank === 1 ? 1 : rank <= Math.ceil(n * 0.25) ? Math.ceil(n * 0.25) : rank <= Math.ceil(n / 2) ? Math.ceil(n / 2) : rank <= Math.ceil(n * 0.8) ? Math.ceil(n * 0.75) : n - 2;
   const label = target === 1 ? 'Şampiyonluk' : target <= Math.ceil(n * 0.25) ? `İlk ${target}` : target <= Math.ceil(n / 2) ? `İlk ${target} (üst yarı)` : target < n - 2 ? `Orta sıralar (ilk ${target})` : 'Ligde kalmak';
@@ -758,6 +767,7 @@ function fxRow(f, { showRound } = {}) {
     : f.played ? `<b class="score">${f.hg} - ${f.ag}</b>`
     : `<span class="score muted">${f.kickoff_at ? kickTime(f.kickoff_at) : '-'}</span>`;
   const tag = f.comp === 'cup' ? `<span class="tag cup">Kupa ${f.cup_round}.tur${f.leg === 2 ? ' rövanş' : ''}</span>`
+    : f.comp === 'euro' ? `<span class="tag euro">🌍 ${esc(compLabel(f).replace('Avrupa · ', ''))}</span>`
     : f.comp === 'friendly' ? '<span class="tag">Hazırlık</span>' : '';
   return `<${link ? `a href="#/oda/${S.gameId}/mac/${f.id}"` : 'div'} class="fx ${mine ? 'mine' : ''} ${st === 'live' ? 'is-live' : ''}">
     ${showRound && f.comp !== 'friendly' ? `<small class="rnd">${f.round}.h${f.kickoff_at && !f.played ? ' ' + new Date(f.kickoff_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : ''}</small>` : ''}
@@ -807,7 +817,7 @@ function renderOzet() {
   const opps = S.teams.filter((x) => x.id !== t?.id);
   const myFriendly = S.friendlies.filter((f) => f.home === t?.id || f.away === t?.id).slice(0, 3);
   view().innerHTML = `
-  ${S.game.status === 'finished' ? `<section class="card champ">🏆 ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''}
+  ${S.game.status === 'finished' ? `<section class="card champ">🏆 ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''} ${S.game.euro?.champion ? `· Avrupa: <b>${esc(tname(S.game.euro.champion))}</b>` : ''}
     ${isOwner() ? `<button class="btn primary big" id="btnSeason" style="margin-top:10px">▶ ${(S.game.season || 1) + 1}. sezonu başlat</button><p class="small">Oyuncular bir yaş büyür; gençler gelişir, yaşlılar düşer, bazıları emekli olur. Kadrolar ve bütçeler kalır.</p>` : '<p class="small">Yeni sezonu oda sahibi başlatır.</p>'}</section>` : ''}
   ${(() => { const p = mine.find((f) => !f.played && f.ht != null); return p ? `<section class="card press"><h2>⏸ Devre arası</h2><p>${esc(tname(p.home))} <b>${p.hg ?? 0} - ${p.ag ?? 0}</b> ${esc(tname(p.away))}</p><p class="small muted">İkinci yarı senin kararını bekliyor: takım konuşması, değişiklik, taktik.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Soyunma odasına git</button></section>` : ''; })()}
   ${pressCard(t, mine)}
@@ -829,7 +839,7 @@ function renderOzet() {
     const opp = S.teamById.get(f.home === t.id ? f.away : f.home);
     const home = f.home === t.id;
     return `<section class="card nextmatch">
-      <div class="nm-head"><small>SIRADAKİ MAÇ · ${f.comp === 'cup' ? `Kupa ${f.cup_round}. tur` : `${f.round}. hafta`}${home ? ' · İç saha' : ' · Deplasman'}</small>
+      <div class="nm-head"><small>SIRADAKİ MAÇ · ${compLabel(f)}${home ? ' · İç saha' : ' · Deplasman'}</small>
         <small>${f.kickoff_at && isAuto() ? kickTxt(f.kickoff_at) : ''}</small></div>
       <div class="nm-teams"><div>${crestSVG(t, 52)}<b>${esc(t.name)}</b>${formHTML(formOf(t.id))}</div><span class="nm-vs">VS</span><div>${crestSVG(opp, 52)}<b>${esc(opp?.name)}</b>${formHTML(formOf(opp?.id))}</div></div>
       ${assistantReport(f)}
@@ -966,7 +976,7 @@ function renderFinans() {
   $('#kBody').innerHTML = `
   <section class="card finhero">
     <div><small>TRANSFER BÜTÇESİ</small><b>${money(t.budget)}</b></div>
-    <div><small>KULÜP İTİBARI</small>${starsHTML(t.reputation || (() => { const r = S.teams.map((x) => ({ id: x.id, p: teamPower(x.id) })).sort((a, b) => b.p - a.p); return leagueStarsN(r.findIndex((x) => x.id === t.id) + 1, r.length); })())}</div>
+    <div><small>KULÜP İTİBARI</small>${starsHTML(t.reputation || (() => { const r = leagueTeams().map((x) => ({ id: x.id, p: teamPower(x.id) })).sort((a, b) => b.p - a.p); return leagueStarsN(r.findIndex((x) => x.id === t.id) + 1, r.length); })())}</div>
   </section>
   <section class="card">
     <h2>Maaşlar</h2>
@@ -1327,12 +1337,12 @@ function renderTeklif() {
 
 // ---------------- lig: fikstür / puan / kupa ----------------
 function renderLig() {
-  const opts = [hasLeague() && ['puan', 'Puan'], ['fikstur', 'Fikstür'], hasCup() && ['kupa', 'Kupa'], ['istat', 'İstatistik'], ['gecmis', 'Geçmiş']].filter(Boolean);
+  const opts = [hasLeague() && ['puan', 'Puan'], ['fikstur', 'Fikstür'], hasCup() && ['kupa', 'Kupa'], hasEuro() && ['avrupa', 'Avrupa'], ['istat', 'İstatistik'], ['gecmis', 'Geçmiş']].filter(Boolean);
   let sub = S.sub.lig || opts[0][0];
   if (!opts.find((o) => o[0] === sub)) sub = opts[0][0];
   view().innerHTML = `<div class="seg wide" id="lSeg">${opts.map(([k, l]) => `<button data-s="${k}" class="${sub === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="lBody"></div>`;
   $$('#lSeg button').forEach((b) => (b.onclick = () => { S.sub.lig = b.dataset.s; renderLig(); }));
-  ({ puan: renderPuan, fikstur: renderFikstur, kupa: renderKupa, istat: renderIstat, gecmis: renderGecmis })[sub]();
+  ({ puan: renderPuan, fikstur: renderFikstur, kupa: renderKupa, avrupa: renderAvrupa, istat: renderIstat, gecmis: renderGecmis })[sub]();
 }
 function renderIstat() {
   const all = [...S.pstats.values()];
@@ -1352,15 +1362,15 @@ function renderIstat() {
 function renderGecmis() {
   const h = [...(S.game.history || [])].reverse();
   const trophies = new Map();
-  for (const x of S.game.history || []) for (const k of ['league', 'cup']) if (x[k]?.name) {
-    const e = trophies.get(x[k].name) || { league: 0, cup: 0 }; e[k]++; trophies.set(x[k].name, e);
+  for (const x of S.game.history || []) for (const k of ['league', 'cup', 'euro']) if (x[k]?.name) {
+    const e = trophies.get(x[k].name) || { league: 0, cup: 0, euro: 0 }; e[k]++; trophies.set(x[k].name, e);
   }
   $('#lBody').innerHTML = `
-  <section class="card"><h2>🏆 Kupa dolabı</h2>${trophies.size ? [...trophies].sort((a, b) => (b[1].league + b[1].cup) - (a[1].league + a[1].cup))
-    .map(([n, e]) => `<div class="lrow"><div class="grow"><b>${esc(n)}</b></div>${e.league ? `<span class="tag on">Lig ×${e.league}</span>` : ''}${e.cup ? `<span class="tag cup">Kupa ×${e.cup}</span>` : ''}</div>`).join('')
+  <section class="card"><h2>🏆 Kupa dolabı</h2>${trophies.size ? [...trophies].sort((a, b) => (b[1].euro * 2 + b[1].league + b[1].cup) - (a[1].euro * 2 + a[1].league + a[1].cup))
+    .map(([n, e]) => `<div class="lrow"><div class="grow"><b>${esc(n)}</b></div>${e.league ? `<span class="tag on">Lig ×${e.league}</span>` : ''}${e.cup ? `<span class="tag cup">Kupa ×${e.cup}</span>` : ''}${e.euro ? `<span class="tag euro">Avrupa ×${e.euro}</span>` : ''}</div>`).join('')
     : '<p class="muted">İlk sezon bitince burada görünecek.</p>'}</section>
   ${h.map((x) => `<section class="card"><h3>${x.season}. sezon</h3>
-    ${x.league ? `<div>🏆 Lig: <b>${esc(x.league.name)}</b></div>` : ''}${x.cup ? `<div>🏆 Kupa: <b>${esc(x.cup.name)}</b></div>` : ''}
+    ${x.league ? `<div>🏆 Lig: <b>${esc(x.league.name)}</b></div>` : ''}${x.cup ? `<div>🏆 Kupa: <b>${esc(x.cup.name)}</b></div>` : ''}${x.euro ? `<div>🌍 Avrupa: <b>${esc(x.euro.name)}</b></div>` : ''}
     ${x.top ? `<div>⚽ Gol kralı: <b>${esc(x.top.name)}</b> (${esc(x.top.team || '')}) — ${x.top.goals} gol</div>` : ''}
     ${x.best ? `<div>⭐ Sezonun oyuncusu: <b>${esc(x.best.name)}</b> (${esc(x.best.team || '')}) — ${x.best.rating}</div>` : ''}</section>`).join('')}`;
 }
@@ -1379,6 +1389,46 @@ function renderFikstur() {
     ${S.fixtures.filter((f) => f.round === r).map((f) => fxRow(f)).join('')}</section>`).join('') || '<p class="muted">Fikstür yok</p>';
   $('#curRound')?.scrollIntoView({ block: 'start' });
 }
+function tieBox(legs) {
+  const a = legs[0].home, b = legs[0].away;
+  const ga = legs.reduce((s, f) => s + (f.played ? (f.home === a ? f.hg : f.ag) : 0), 0);
+  const gb = legs.reduce((s, f) => s + (f.played ? (f.home === b ? f.hg : f.ag) : 0), 0);
+  const w = legs.find((f) => f.winner)?.winner;
+  const pens = legs.find((f) => f.pens);
+  const mine = [a, b].includes(me()?.id);
+  return `<div class="tie ${mine ? 'mine' : ''}">
+    <div class="${w === a ? 'win' : w ? 'lose' : ''}">${teamDot(S.teamById.get(a))} ${esc(tname(a))}<b>${legs.some((f) => f.played) ? ga : ''}</b></div>
+    <div class="${w === b ? 'win' : w ? 'lose' : ''}">${teamDot(S.teamById.get(b))} ${esc(tname(b))}<b>${legs.some((f) => f.played) ? gb : ''}</b></div>
+    <small class="muted">${legs.map((f) => f.played ? `<a href="#/oda/${S.gameId}/mac/${f.id}">${legs.length > 1 ? f.leg + '. maç ' : ''}${tshort(f.home)} ${f.hg}-${f.ag} ${tshort(f.away)}</a>` : `${legs.length > 1 ? f.leg + '. maç: ' : ''}${f.round}. hafta`).join(' · ')}${pens ? ` · pen. ${esc(pens.pens)}` : ''}</small>
+  </div>`;
+}
+function renderAvrupa() {
+  const e = S.game.euro || {};
+  const ef = S.fixtures.filter((f) => f.comp === 'euro');
+  const myId = me()?.id;
+  const inIt = (e.groups || []).some((g) => g.includes(myId));
+  const ko = [3, 2, 1].map((r) => {
+    const fx = ef.filter((f) => f.cup_round === r);
+    if (!fx.length) return '';
+    const ties = [...new Set(fx.map((f) => f.tie))].sort((a, b) => a - b);
+    return `<section class="card"><h3>${EURO_ST[r]}</h3>${ties.map((t) => tieBox(fx.filter((f) => f.tie === t).sort((a, b) => a.leg - b.leg))).join('')}</section>`;
+  }).join('');
+  const groups = (e.groups || []).map((g, gi) => {
+    const rows = S.euroTable.filter((x) => x.grp === gi + 1);
+    const gfx = ef.filter((f) => f.cup_round === 0 && f.tie === gi + 1);
+    const nextFx = gfx.filter((f) => !f.played);
+    return `<section class="card ${g.includes(myId) ? 'cur' : ''}"><h3>${String.fromCharCode(65 + gi)} Grubu</h3>
+      <table class="tbl"><thead><tr><th>#</th><th class="l">Takım</th><th>O</th><th class="hide-s">G</th><th class="hide-s">B</th><th class="hide-s">M</th><th>AV</th><th>P</th></tr></thead>
+      <tbody>${rows.map((r, i) => { const t = S.teamById.get(r.team_id); return `<tr class="${r.team_id === myId ? 'mine' : ''}"><td>${i + 1}${i < 2 && r.o ? '<small class="q">▲</small>' : ''}</td><td class="l">${teamDot(t)} ${esc(t?.name)}${t && !t.guest ? ' <small class="muted">(lig)</small>' : ''}</td><td>${r.o}</td><td class="hide-s">${r.w}</td><td class="hide-s">${r.d}</td><td class="hide-s">${r.l}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td><b>${r.pts}</b></td></tr>`; }).join('')}</tbody></table>
+      ${g.includes(myId) || nextFx.length ? `<details ${g.includes(myId) ? 'open' : ''}><summary class="small muted">Grup maçları</summary>${gfx.map((f) => fxRow(f, { showRound: true })).join('')}</details>` : ''}
+    </section>`;
+  }).join('');
+  $('#lBody').innerHTML = `
+  ${e.champion ? `<section class="card champ">🌍🏆 Avrupa şampiyonu: <b>${esc(tname(e.champion))}</b></section>` : ''}
+  <section class="card"><p class="small muted">16 takım: ligimizin en iyileri ve Avrupa'nın devleri. Gruplarda ilk 2 çeyrek finale çıkar; çeyrek ve yarı final rövanşlı, final tek maç.
+    ${inIt ? 'Her tur ek gelir: katılım, çeyrek final, yarı final, final ve şampiyonluk primi; iç saha biletleri 2.5 kat.' : 'Bu sezon Avrupa\'da değilsin — ligi ilk sıralarda bitirirsen gelecek sezon sen de buradasın.'}</p></section>
+  ${ko}${groups}`;
+}
 function renderKupa() {
   const cup = S.game.cup || {};
   const cf = S.fixtures.filter((f) => f.comp === 'cup');
@@ -1389,19 +1439,7 @@ function renderKupa() {
   ${cup.champion ? `<section class="card champ">🏆 Kupa şampiyonu: <b>${esc(tname(cup.champion))}</b></section>` : ''}
   ${rounds.map((r) => {
     const ties = [...new Set(cf.filter((f) => f.cup_round === r).map((f) => f.tie))];
-    return `<section class="card"><h3>${rName(r)}</h3>${ties.map((tie) => {
-      const legs = cf.filter((f) => f.cup_round === r && f.tie === tie).sort((a, b) => a.leg - b.leg);
-      const a = legs[0].home, b = legs[0].away;
-      const ga = legs.reduce((s, f) => s + (f.played ? (f.home === a ? f.hg : f.ag) : 0), 0);
-      const gb = legs.reduce((s, f) => s + (f.played ? (f.home === b ? f.hg : f.ag) : 0), 0);
-      const w = legs.find((f) => f.winner)?.winner;
-      const pens = legs.find((f) => f.pens);
-      return `<div class="tie">
-        <div class="${w === a ? 'win' : w ? 'lose' : ''}">${teamDot(S.teamById.get(a))} ${esc(tname(a))}<b>${legs.some((f) => f.played) ? ga : ''}</b></div>
-        <div class="${w === b ? 'win' : w ? 'lose' : ''}">${teamDot(S.teamById.get(b))} ${esc(tname(b))}<b>${legs.some((f) => f.played) ? gb : ''}</b></div>
-        <small class="muted">${legs.map((f) => f.played ? `<a href="#/oda/${S.gameId}/mac/${f.id}">${f.leg}. maç ${tshort(f.home)} ${f.hg}-${f.ag} ${tshort(f.away)}</a>` : `${f.leg}. maç: ${f.round}. hafta`).join(' · ')}${pens ? ` · pen. ${esc(pens.pens)}` : ''}</small>
-      </div>`;
-    }).join('')}</section>`;
+    return `<section class="card"><h3>${rName(r)}</h3>${ties.map((tie) => tieBox(cf.filter((f) => f.cup_round === r && f.tie === tie).sort((a, b) => a.leg - b.leg))).join('')}</section>`;
   }).join('') || '<section class="card"><p class="muted">Kupa maçı yok</p></section>'}
   ${(cup.byes || []).length && !cup.champion ? `<section class="card"><h3>Bu turu bay geçenler</h3>${cup.byes.map((id) => `<div>${teamDot(S.teamById.get(id))} ${esc(tname(id))}</div>`).join('')}</section>` : ''}`;
 }

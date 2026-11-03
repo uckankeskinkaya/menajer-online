@@ -63,6 +63,7 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 | 023_moral_ayar | ✅ `execute_sql`: moral etkisi ±%1.8 (021'deki ±%4.5 kartopu etkisiyle gol ortalamasını 4.2'ye çıkarmıştı), maç sonu ±4, her maç 70'e %10 dönüş → canlıda 380 maçta 2.66 gol |
 | 024_devre_arasi | ✅ kullanıcı SQL Editor'den (girinti farkı dışında aynı): `play_second_half(p_game, p_talk, p_mentality, p_lineup)` (takım konuşması ±%3, aynı mevkiye en fazla kalan hak kadar değişiklik, YZ gerideyse hücum) |
 | 025_iki_yari | ✅ `execute_sql` (md5 yerel kopyayla aynı; canlıda tarayıcıdan uçtan uca denendi): `_sim_fixture` 45'te durabilir (`stats.stop`), durum `stats.ht`; `_play_round` kariyerde menajerin maçını durdurur ve haftayı bekletir; `_play_fixture` ödülleri maç bitince; `_auto_tick` devre arasındakini atlar |
+| 026_avrupa + 027_avrupa_yetki | ✅ 026 fonksiyonları `execute_sql` ile (önce yeni 8 fonksiyon `check_function_bodies = off`, 027'den sonra mevcut 6'sı; md5 yerel kopyayla aynı), 027 (alter + revoke, kısa) kullanıcı SQL Editor'den (026'yı telefondan yapıştırmak boşluklar yüzünden bozulmuştu). Canlıda geri alınan Juventus kariyeriyle tam sezon test edildi. Kariyerde Avrupa kupası: 16 takım (kariyer liginden 4/3/2 + diğer liglerin en güçlü kulüpleri `teams.guest`, ligde/iç kupada oynamaz), 4 grup çift devre + rövanşlı çeyrek/yarı + tek maç final, `fixtures.comp = 'euro'` (`cup_round` 0 grup/1 çeyrek/2 yarı/3 final, grupta `tie` = grup), durum `games.euro` (`rounds`, `groups`, `stage`, `champion`, sezon sonu `next`), `euro_table` RPC, ödüller `_euro_prize`, bilet 2.5 kat |
 | Web istemcisi (`web/`) | ✅ yayında; 2 kullanıcıyla uçtan uca test edildi (kayıt→oda→lobi→başlat→taktik→açık artırma→menajer teklifi→hafta→maç izleme→lig/kupa). Test verisi silindi |
 | GitHub Pages | ✅ "Deploy from a branch" (main, kök). Kökteki `index.html` → `web/`'e yönlendirir; `.nojekyll` ile Jekyll kapalı. Adres: https://uckankeskinkaya.github.io/menajer-online/ |
 | `get_advisors` | ✅ sadece beklenen uyarı: authenticated'ın oyun RPC'lerini çağırabilmesi (tasarım gereği). anon hiçbir fonksiyonu çağıramaz |
@@ -81,7 +82,7 @@ Yol haritası: `docs/PLAN.md` (fazlar ve maddeler; her oturum sonunda güncelle)
 `real_players` · `profiles` · `games` (code, owner, status lobby/active/finished, settings, current_round, cup) ·
 `teams` (budget, formation, mentality -2..2, lineup int[11], instr {press,tempo,width} 0..2) · `squads` (satır yoksa oyuncu yapay zeka kulübünde; morale, contract) ·
 `offers` (seller null = yapay zeka açık artırması; bidder null + `ai_club` = YZ kulübünün menajere teklifi) · `fixtures` (comp league/cup, round, cup_round, leg, tie, hg, ag, pens, winner, events, stats) ·
-`news` (team_id null = herkese). Realtime: games, offers, news, fixtures, teams, squads.
+`news` (team_id null = herkese). Kariyerde Avrupa: `teams.guest` (sadece Avrupa'da oynayan misafir kulüp; lig/kupa/puan durumu/istatistik dışı), `games.euro`, `fixtures.comp = 'euro'`. Realtime: games, offers, news, fixtures, teams, squads.
 
 ## Çalışma kuralları
 
@@ -89,6 +90,7 @@ Yol haritası: `docs/PLAN.md` (fazlar ve maddeler; her oturum sonunda güncelle)
   değiştirme, yeni numaralı dosya ekle.
 - Supabase MCP `apply_migration`/`execute_sql` kullanıcı onayı ister ve **60 sn** içinde cevap gelmezse zaman aşımına düşer;
   göndermeden önce kullanıcıya haber ver.
+- Uzun fonksiyonları kullanıcıya SQL Editor için verme (telefondan yapıştırınca bozuluyor): fonksiyonları `execute_sql` ile sen uygula, kullanıcıya sadece kısa tek satırlık `alter`/`revoke` dosyası ver. Henüz olmayan kolona dayanan fonksiyonu önceden yüklemek için `set check_function_bodies = off;`.
 - Denemeleri `execute_sql` ile geri alınan `DO` bloklarında yap (bkz. `sql-test` skill'i), migration'ı en son uygula.
 - Onay gerektiren (delete/drop/revoke/alter) değişiklikleri önce yerel Postgres kopyasında test et: `apt-get install postgresql-16-cron`, initdb, `auth` şeması + `auth.uid()` + `anon/authenticated` rolleri taklidi, 001-00N migration'ları, oyuncuları `data/` veya yüklenen players.json'dan yükle. Sonra dosyayı kullanıcıya Raw bağlantısıyla SQL Editor için ver.
 - Yeni RPC eklerken `rpc-ekle`, maç motoruna dokunurken `mac-motoru` skill'ini izle. Postgres/Supabase işlerinde
