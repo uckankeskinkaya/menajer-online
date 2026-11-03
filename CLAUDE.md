@@ -75,6 +75,8 @@ Kod tanımlayıcıları (tablo, kolon, fonksiyon adları) İngilizce kalabilir; 
 `execute_sql`'de `delete`, `revoke`, `create extension` gibi ifadeler (fonksiyon gövdesindeki `delete` dahil) onay ister (60 sn) ve kullanıcının cihazında bu pencere AÇILMIYOR: böyle SQL'i kullanıcıya SQL Editor'de çalıştırması için ver; `create or replace function` ve DO bloklarındaki testler onaysız geçer.
 Aynı istekte hem değişiklik hem `raise exception`'lı test gönderme: exception değişikliği de geri alır.
 
+Arayüz teması (v2, `app.css` sonundaki "TEMA v2"): maç günü / menajer oyunu havası; düz paneller, dar büyük harfli başlıklar (Barlow Condensed), eğik kesik butonlar/sekmeler; vurgu rengi `--acc` oyundaki takımın forma rengi (`setAccent`, koyu renkte ikinci renk, o da koyuysa limon yeşili). Ekran sınıfı `view v-<sekme>` (`setScreen`). 960 px üstü: solda dikey menü; 1100 px üstü Özet/ana ekran/lig sütunlu pano, Pazar'da filtreler solda, Taktik'te saha yanda. Emoji yerine `ICON` SVG'leri.
+
 İstemci ekranları (mobil öncelikli): giriş/kayıt, oda kur/katıl, lobi + ayarlar, kadro, taktik (diziliş + ilk 11),
 transfer pazarı (lig/mevki/rating/fiyat filtresi), teklifler (gelen/giden, canlı), fikstür/puan durumu/kupa ağacı, haberler, 2D maç izleme.
 
