@@ -133,6 +133,7 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .crest, .shirt { display: block; flex: none; }
 .tag { display: inline-flex; align-items: center; gap: 4px; font: 700 11px/1 var(--font); padding: 4px 8px; border-radius: 20px; background: #26324d; color: var(--text); white-space: nowrap; }
 .tag.on { background: rgba(34,197,94,.18); color: #86efac; } .tag.auc { background: rgba(245,158,11,.18); color: #fcd34d; } .tag.cup { background: rgba(167,139,250,.2); color: #ddd6fe; }
+.tag.euro { background: rgba(56,189,248,.18); color: #bae6fd; } .tie.mine { outline: 1px solid rgba(56,189,248,.45); border-radius: 10px; } .tbl small.q { color: #86efac; font-size: 9px; margin-left: 2px; }
 .tag.own { background: #1c2742; } .tag.bad { background: rgba(239,68,68,.2); color: #fecaca; } .tag.warn { background: rgba(245,158,11,.2); color: #fde68a; }
 .tag.st-won, .tag.st-accepted { background: rgba(34,197,94,.18); color: #86efac; } .tag.st-lost, .tag.st-rejected, .tag.st-outbid { background: rgba(239,68,68,.18); color: #fecaca; }
 .tag.rep { background: var(--err); color: #fff; font-size: 13px; padding: 6px 12px; letter-spacing: .1em; }

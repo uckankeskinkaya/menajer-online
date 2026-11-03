@@ -1,6 +1,6 @@
 # Menajer Online — Güncelleme Planı
 
-Son güncelleme: 2 Kasım 2026. Durum işaretleri: ⬜ yapılacak · 🟡 sürüyor · ✅ bitti.
+Son güncelleme: 3 Kasım 2026. Durum işaretleri: ⬜ yapılacak · 🟡 sürüyor · ✅ bitti.
 Her maddenin yanında **[S]** sunucu (Supabase SQL), **[İ]** istemci (`web/`), **[K]** senin (kullanıcının) yapması gereken bir ayar var.
 
 Öncelik sırası: önce arkadaşlarla gerçekten oynarken çıkan sorunlar, sonra oyunu derinleştiren özellikler, en son görsellik.
@@ -94,3 +94,4 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4i | Maç görüntüsü yeniden yazıldı (sim.js): oyun kurulumu, pres + adam takibi, kaleci uzanması/tutma/çelme, dönen top, file dalgası, gol sevinci, daha hızlı 1x | ✅ |
 | 4j | Moral + basın toplantısı, sözleşmeler (uzatma / bedelsiz ayrılık), altyapıdan genç oyuncular | ✅ |
 | 4k | Devre arası kararları (kariyer): maç 45'te durur, takım konuşması, değişiklik, oyun anlayışı, talimat | ✅ |
+| 4l | Kariyerde Avrupa kupası: lig ilk 2-4'ü + Avrupa devleri, 4 grup + rövanşlı eleme + final, ödüller, Lig → Avrupa sekmesi, kupa dolabında Avrupa | 🟡 (026 SQL Editor'de uygulanınca ✅) |
