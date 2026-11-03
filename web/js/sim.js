@@ -9,8 +9,8 @@ export const PL = 105, PW = 68;         // saha (m)
 const DT = 0.05;                        // simülasyon adımı (sn)
 // kare: 22 oyuncu (x,y) | top x,y,z | topu tutan | yerde yatan | ev kalecisi uzanma | dep. kalecisi uzanma | file
 export const FRAME = 44 + 3 + 1 + 1 + 2 + 1;
-const JOG = 4.6, RUN = 7.4, SPRINT = 8.6, WALK = 2.0, ACC = 9;
-const BUILD = 8.5;                      // önemli andan önce oyun kurulumu (sn)
+const JOG = 5.1, RUN = 7.8, SPRINT = 8.9, WALK = 2.0, ACC = 10;
+const BUILD = 7.0;                      // önemli andan önce oyun kurulumu (sn)
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -66,6 +66,10 @@ export function simulateMatch(fx, events, R, ins = {}) {
   let dead = null, restart = null, mode = null; // mode: önemli an planı
   let ei = 0, fi = 0, t = 0, fallen = -1;
   let tackleT = 0, cornerClear = null, duelT = -9;
+  const offsides = [];                       // ofsayt düdükleri (izleyici akışı için)
+  const gotFrom = new Array(22).fill(-1);    // topu kimden aldı (aynı kişiye geri pas az olsun)
+  const won = { h: -9, a: -9 };              // takım topu en son ne zaman kazandı (geçiş hücumu)
+  let lastSide = null;
   const lunge = {}, side = {}; // ikili mücadele: savunmacı dalışı, hücumcunun sıyrılması
   const gkMove = {}; // kaleci uzanması (kinematik)
   // her oyuncunun kendine özgü küçük sapmaları ve hareket ritmi: kimse sıra hâlinde heykel gibi durmasın
@@ -98,26 +102,52 @@ export function simulateMatch(fx, events, R, ins = {}) {
     if (opts.at) { x1 = opts.at.x; y1 = opts.at.y; }
     const d = Math.hypot(x1 - ball.x, y1 - ball.y);
     const lofted = opts.lofted ?? d > 30;
-    return fly(to, x1, y1, 'pass', s, lofted ? 19 : 15 + Math.min(8, d * 0.25), lofted ? clamp(d * 0.12, 2.5, 7) : 0.15, { curve: opts.curve || 0 });
+    // ofsayt: pas anında alıcı rakibin sondan ikinci oyuncusunun ve topun önündeyse (kendi yarı sahası hariç)
+    const gR = G(s, tp.y), offPos = to % 11 !== 0 && !opts.noOff && gR > PL / 2 && gR > G(s, ball.y) + 0.3 && gR > offLine(s) + 0.25;
+    return fly(to, x1, y1, 'pass', s, lofted ? 21 : 17 + Math.min(9, d * 0.3), lofted ? clamp(d * 0.12, 2.5, 7) : 0.15, { curve: opts.curve || 0, from, offPos, offX: tp.x, offY: tp.y });
+  }
+  const mostAdvanced = (s) => { let b = -1, bg = -1; for (let k = 1; k < 11; k++) { if (roles[s][k].r < 0.85) continue; const g = G(s, P[J(s, k)].y); if (g > bg) { bg = g; b = J(s, k); } } return b; };
+  const onside = (j) => G(sideOf(j), P[j].y) <= offLine(sideOf(j)) + 0.2 || G(sideOf(j), P[j].y) <= G(sideOf(j), ball.y);
+  // pas hattı: rakiplerin top yoluna en yakın uzaklığı
+  function laneGap(from, x1, y1, s) {
+    const a = P[from], L2 = (x1 - a.x) ** 2 + (y1 - a.y) ** 2 || 1; let md = 99;
+    for (let k = 0; k < 11; k++) {
+      const q = P[J(other(s), k)];
+      const u = ((q.x - a.x) * (x1 - a.x) + (q.y - a.y) * (y1 - a.y)) / L2;
+      if (u < 0.12 || u > 1.02) continue;
+      md = Math.min(md, Math.hypot(a.x + u * (x1 - a.x) - q.x, a.y + u * (y1 - a.y) - q.y));
+    }
+    return md;
   }
   // pas seçimi: ileri, açık, ofsaytta olmayan; gerekirse yana
-  function choosePass(from, push, skip = -1) {
+  let passW = 0; // son seçilen pasın puanı (zayıfsa oyuncu topu sürer)
+  function choosePass(from, push, skip = -1, mistime = 0) {
     const s = sideOf(from), g0 = G(s, P[from].y), off = offLine(s);
+    const counter = t - won[s] < 4.5;   // top yeni kazanıldı: hızlı, dikine
     let best = -1, bw = -1, near = -1, nd = 1e9;
     for (let k = 1; k < 11; k++) {
       const j = J(s, k); if (j === from || j === skip) continue;
-      { const dn = dist(P[j], P[from]); if (dn > 5 && dn < nd && G(s, P[j].y) < off - 0.5) { nd = dn; near = j; } }
-      const d = dist(P[j], P[from]); if (d < 6 || d > 42) continue;
-      const g = G(s, P[j].y); if (g > off - 0.5) continue;
-      const opp = nearest(other(s), P[j], false);
-      const open = clamp(dist(P[opp], P[j]) / 7, 0.1, 1.2);
-      const fwd = (g - g0) / 20;
-      let w = open * (push ? 0.4 + Math.max(0, fwd) * 2.2 : 1 + fwd * 0.8) * (d < 30 ? 1 : 0.6);
-      if (push && fwd < -0.25) w *= 0.15;
-      if (g0 > PL * 0.6 && g < g0 - 8) w *= Math.abs(P[j].x - PW / 2) < 18 ? 0.08 : 0.3; // hücumda topu geri, göbeğe atma
-      w *= 0.7 + R() * 0.6;
+      const d = dist(P[j], P[from]), g = G(s, P[j].y);
+      const late = g > off - 0.3; // ofsayt pozisyonunda
+      if (!late && d > 5 && d < nd) { nd = d; near = j; }
+      if (d < 5 || d > 46) continue;
+      if (late && !(mistime && roles[s][k].r > 0.85 && g < off + 3.5 && R() < mistime)) continue; // erken koşu: bazen ofsayta düşer
+      const tx = clamp(P[j].x + P[j].vx * 0.5, 2, PW - 2), ty = Yg(s, clamp(g + 2, 3, PL - 8));
+      const gap = laneGap(from, tx, ty, s);
+      const safe = clamp((gap - 0.9) / 3.2, 0.03, 1);
+      const open = clamp(dist(P[nearest(other(s), P[j], false)], P[j]) / 6, 0.15, 1.2);
+      const gain = g - g0;
+      const kz = g0 < 35 ? 0.025 : g0 < 70 ? 0.055 : 0.04;
+      let w = safe * safe * open * (1 + Math.max(0, gain) * kz * (counter ? 2 : 1) * (push ? 1.4 : 1));
+      if (gain < -4) w *= counter ? 0.15 : push ? 0.3 : 0.6;
+      if (g0 > PL * 0.6 && gain < -8) w *= Math.abs(P[j].x - PW / 2) < 18 ? 0.08 : 0.3; // hücumda topu geri, göbeğe atma
+      w *= d < 8 ? 0.7 : d <= 30 ? 1 : 0.65;
+      if (late) w *= 1.8; // savunma arkasına koşu cazip görünür
+      if (j === gotFrom[from]) w *= 0.3; // az önce pası veren oyuncuya hemen geri verme
+      w *= 0.85 + R() * 0.3;
       if (w > bw) { bw = w; best = j; }
     }
+    passW = Math.max(0, bw);
     return best >= 0 ? best : near;
   }
 
@@ -262,7 +292,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
       const q = me.pre;
       if (q && !me.setup) {
         // hücumcuya pas, savunmacı dalar / el: orta koluna çarpar
-        if (!q.hand && holder !== null && sideOf(holder) === s && holder !== q.W && !q.passed && t >= nextAct) { q.passed = true; passTo(holder, q.W, { at: { x: lerp(P[q.W].x, q.tp.x, 0.6), y: lerp(P[q.W].y, q.tp.y, 0.6) } }); }
+        if (!q.hand && holder !== null && sideOf(holder) === s && holder !== q.W && !q.passed && t >= nextAct && (onside(q.W) || t > q.t0 + 6)) { q.passed = true; passTo(holder, q.W, { at: { x: lerp(P[q.W].x, q.tp.x, 0.6), y: lerp(P[q.W].y, q.tp.y, 0.6) } }); }
         if (q.hand && !q.launched && holder !== null && sideOf(holder) === s && (dist(P[q.F], q.hs) < 2.5 || t > q.t0 + 6)) { q.launched = true; fly(q.F, P[q.F].x, P[q.F].y, 'hand', s, 18, dist(ball, P[q.F]) > 18 ? 2.5 : 0.9); }
         const inBox = Math.abs(P[q.W].x - PW / 2) < 19.5 && G(s, P[q.W].y) > PL - 16.3;
         let blow = false;
@@ -293,7 +323,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
         const tempo = IN[s].tempo, gH = G(s, P[H].y), timeLeft = me.T - t;
         if (me.style === 'corner' && mode.cornerReady) { // korner ortası: golcünün kafasına
           mode.cornerReady = false;
-          passTo(H, me.shooter, { at: me.spot, lofted: true }); flight.arc = 4.5; me.delivered = true;
+          passTo(H, me.shooter, { at: me.spot, lofted: true, noOff: true }); flight.arc = 4.5; me.delivered = true;
         } else if (me.style === 'corner' && me.setup) { nextAct = t + 0.3; }
         else if (H === me.shooter && me.style !== 'corner') {
           const range = me.style === 'long' ? 36 : 26;
@@ -303,10 +333,13 @@ export function simulateMatch(fx, events, R, ins = {}) {
           } else nextAct = t + 0.2; // şut anı: kaleye doğru sürer
         } else if (me.style === 'cross' && me.winger >= 0) {
           if (H === me.winger) {
-            if (timeLeft < 1.4 || G(s, P[H].y) > PL - 11) { const sp = P[me.shooter]; passTo(H, me.shooter, { at: { x: lerp(sp.x, me.spot.x, 0.5), y: Yg(s, clamp(G(s, sp.y) + 2, PL - 16, PL - 5)) }, lofted: true }); flight.arc = 3.5 + R(); me.crossT = t; }
+            if ((timeLeft < 1.4 || G(s, P[H].y) > PL - 11) && !onside(me.shooter) && t < me.T + 2) nextAct = t + 0.15;
+            else if (timeLeft < 1.4 || G(s, P[H].y) > PL - 11) { const sp = P[me.shooter]; passTo(H, me.shooter, { at: { x: lerp(sp.x, me.spot.x, 0.5), y: Yg(s, clamp(G(s, sp.y) + 2, PL - 16, PL - 5)) }, lofted: true }); flight.arc = 3.5 + R(); me.crossT = t; }
             else nextAct = t + 0.2;
           } else if (timeLeft < 4 + R()) passTo(H, me.winger, { at: { x: mode.wx, y: gy - dirY(s) * (24 + R() * 6) } });
           else { const to = choosePass(H, true, me.shooter); if (to >= 0) passTo(H, to); nextAct = t + 0.6 + R() * 0.4; }
+        } else if (timeLeft < 1.7 && (me.style === 'thru' || me.style === 'long') && !onside(me.shooter) && t < me.T + 2) {
+          nextAct = t + 0.15; // golcü ofsayttan çıksın
         } else if (timeLeft < 1.7 && (me.style === 'thru' || me.style === 'long')) {
           const sp = P[me.shooter];
           if (me.style === 'thru') passTo(H, me.shooter, { at: { x: clamp(lerp(sp.x, me.spot.x, 0.4), 5, PW - 5), y: Yg(s, clamp(G(s, sp.y) + 5, 10, PL - 9)) }, lofted: dist(P[H], sp) > 32 });
@@ -320,7 +353,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
       }
       // geç kaldı: golcüye ceza sahasına doğrudan top
       if (!me.done && t > me.T + 1.2 && !dead && holder !== null && sideOf(holder) === s && holder !== me.shooter && !me.rescue && me.spot && me.style !== 'pen' && me.style !== 'fk') {
-        me.rescue = true; const sp = P[me.shooter]; passTo(holder, me.shooter, { at: { x: sp.x, y: Yg(s, Math.min(G(s, sp.y) + 3, PL - 9)) }, lofted: dist(P[holder], sp) > 25 });
+        if (!onside(me.shooter) && t < me.T + 3) { /* bekle */ } else { me.rescue = true; const sp = P[me.shooter]; passTo(holder, me.shooter, { at: { x: sp.x, y: Yg(s, Math.min(G(s, sp.y) + 3, PL - 9)) }, lofted: dist(P[holder], sp) > 25 }); }
       }
       // 4) şut
       const byline = G(s, ball.y) > PL - 4 && Math.abs(ball.x - PW / 2) > 12; // korner bayrağı / çizgi dibi
@@ -351,15 +384,28 @@ export function simulateMatch(fx, events, R, ins = {}) {
           fly(-1, x1, gy + dirY(s) * 1.5, 'byline', s, 17, 0.4, { gkSide: d });
         }
         nextAct = t + 0.8;
+      } else if (gH > 34 && gH < 76 && R() < 0.24 && (() => { const f = mostAdvanced(s); return f >= 0 && G(s, P[f].y) > offLine(s) - 10; })()) {
+        // savunma arkasına ara pas: forvet koşuyu zamanlarsa sarkar, erken kalkarsa ofsayt
+        const f = mostAdvanced(s), off = offLine(s), ofs = R() < 0.45;
+        passTo(holder, f, { at: { x: clamp(P[f].x + (PW / 2 - P[f].x) * 0.2, 6, PW - 6), y: Yg(s, Math.min(off + 9, PL - 12)) }, lofted: dist(P[holder], P[f]) > 32, noOff: true });
+        if (ofs) { flight.offPos = true; flight.offX = P[f].x; flight.offY = Yg(s, Math.max(G(s, P[f].y), off + 0.8)); }
+        nextAct = t + 0.8;
       } else {
-        const to = choosePass(holder, true);
-        if (to >= 0) {
-          // pas yolunda savunmacı varsa araya girebilir
-          const mid = { x: (P[holder].x + P[to].x) / 2, y: (P[holder].y + P[to].y) / 2 }, cut = nearest(d, mid);
-          if (dist(P[cut], mid) < 2.5 && R() < 0.35 + (0.5 - share) * 0.4) fly(cut, lerp(P[holder].x, P[to].x, 0.55), lerp(P[holder].y, P[to].y, 0.55), 'pass', d, 16, 0.2);
-          else passTo(holder, to);
-        }
-        nextAct = t + (0.6 + R() * 0.8) * (1 - (tempo - 1) * 0.25);
+        const to = choosePass(holder, true, -1, 0.5);
+        const space = dist(P[nearest(d, P[holder], false)], P[holder]);
+        if (to >= 0 && (passW > 0.18 || space < 4)) {
+          // kapalı hatta pas: araya giren savunmacı alır
+          const gap = laneGap(holder, P[to].x, P[to].y, s);
+          if (gap < 1.3 && R() < 0.55 + (0.5 - share) * 0.4) {
+            const cut = nearest(d, { x: (P[holder].x + P[to].x) / 2, y: (P[holder].y + P[to].y) / 2 });
+            fly(cut, lerp(P[holder].x, P[to].x, 0.5), lerp(P[holder].y, P[to].y, 0.5), 'pass', d, 16, 0.2);
+          } else {
+            passTo(holder, to);
+            // çizgi dibindeki forvete ara pas: koşu bazen erken, yan hakem bayrak kaldırır
+            if (roles[s][to % 11].r > 0.85 && G(s, P[to].y) > offLine(s) - 1.6 && G(s, P[to].y) > PL / 2 + 5 && R() < 0.3) { flight.offPos = true; flight.offX = P[to].x; flight.offY = P[to].y; }
+          }
+          nextAct = t + (0.5 + R() * 0.7) * (1 - (tempo - 1) * 0.25);
+        } else nextAct = t + 0.45; // iyi seçenek yok: topu ileri sürer, az sonra yeniden bakar
       }
     }
     // kaleci topu tutuyorsa: kısa süre sonra oyunu başlatır
@@ -372,11 +418,11 @@ export function simulateMatch(fx, events, R, ins = {}) {
         if (free < 9) continue;
         const w = free + (roles[s][k].r < 0.2 ? 4 : 0) + R() * 3; if (w > bw) { bw = w; to = j; }
       }
-      if (to >= 0) { passTo(holder, to, { lofted: dist(P[holder], P[to]) > 25, lead: 1 }); flight.gkDist = true; }
+      if (to >= 0) { passTo(holder, to, { lofted: dist(P[holder], P[to]) > 25, lead: 1, noOff: true }); flight.gkDist = true; }
       else { // uzun: orta sahadaki / forvetteki en boş oyuncuya
         for (let k = 1; k < 11; k++) { const j = J(s, k); if (roles[s][k].r < 0.45) continue; const w = dist(P[nearest(d, P[j], false)], P[j]) + R() * 4; if (w > bw) { bw = w; to = j; } }
         if (to >= 0) {
-          passTo(holder, to, { lofted: true, lead: 0.5 }); flight.arc = Math.max(flight.arc, 6); flight.gkDist = true;
+          passTo(holder, to, { lofted: true, lead: 0.5, noOff: true }); flight.arc = Math.max(flight.arc, 6); flight.gkDist = true;
           if (R() < 0.3) { flight.to = nearest(d, { x: flight.x1, y: flight.y1 }); flight.side = d; } // hava topunu rakip kazanır
         }
       }
@@ -445,8 +491,14 @@ export function simulateMatch(fx, events, R, ins = {}) {
           const gkj = J(f.gkSide, 0);
           setDead('out');
           restart = { t: t + 2.2, x: PW / 2 + (R() - 0.5) * 8, y: goalY(f.side) - dirY(f.side) * 5.5, holder: gkj, kind: 'goalkick' };
+        } else if (f.offPos && f.to >= 0 && !(mode && mode.s === f.side)) { // ofsayt: yan hakem bayrak kaldırır
+          const s2 = f.side, d2 = other(s2);
+          offsides.push({ t: t / SPM, s: s2, p: f.to });
+          setDead('offside');
+          const at = { x: clamp(f.offX, 2, PW - 2), y: clamp(f.offY, 2, PL - 2) };
+          restart = { t: t + 2.4, x: at.x, y: at.y, holder: nearest(d2, at), kind: 'free' };
         } else if (f.to >= 0 && dist(P[f.to], ball) < (f.arc > 1 ? 3 : 2.2)) {
-          holder = f.to; nextAct = Math.max(nextAct, t + 0.25 + R() * 0.25);
+          holder = f.to; nextAct = Math.max(nextAct, t + 0.25 + R() * 0.25); if (f.from !== undefined) gotFrom[f.to] = f.from;
           if (f.clear) { // kafayla uzaklaştırma: top orta sahaya, oradaki mücadeleyi yakın olan kazanır
             const s2 = sideOf(f.to), tgt = { x: clamp(ball.x + (R() - 0.5) * 30, 6, PW - 6), y: Yg(s2, clamp(G(s2, ball.y) + 30 + R() * 15, 30, 62)) };
             const mine = nearest(s2, tgt), theirs = nearest(other(s2), tgt);
@@ -468,6 +520,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
 
     // ---- oyuncular ----
     const ps = possSide();
+    if (ps && ps !== lastSide) { won[ps] = t; lastSide = ps; }
     const bxm = flight ? flight.x1 : ball.x, bym = flight ? flight.y1 : ball.y;
     // savunma: 1. presçi topa, 2. presçi pas yoluna, diğerleri bölge + adam takibi
     const blk = {};
@@ -510,6 +563,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
       const cxs = PW / 2 + (bxm - PW / 2) * (own ? 0.32 : 0.55);
       const wdt = own ? PW * 0.84 * (1 + wd2 * 0.07) : PW * 0.52;
       tx = cxs + (ro.fx - 0.5) * wdt + pe.ox * (ro.r < 0.2 ? 0.4 : 1);
+      let early = false; // forvetin erken koşusu (ofsayta düşebilir)
       let g = bk.line + ro.r * bk.len + pe.oy * (ro.r < 0.2 ? 0.25 : 1);
       if (own && ro.r > 0.3) g += Math.abs(ro.fx - 0.5) * 7;                // hücumda kanatlar biraz önde
       if (!own && Math.abs(tx - bxm) > 22) tx += (bxm - tx) * 0.25;         // savunmada uzak taraf içeri kapanır
@@ -518,7 +572,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
         const h = P[holder], hg = G(s, h.y);
         if (ro.r > 0.9) { // forvet: bir topa gelir, bir savunma arkasına koşar
           const cyc = Math.sin(t * 0.45 * pe.fr + pe.run);
-          if (cyc > 0.35) { g = Math.max(g, bk.off - 0.8); tx = lerp(tx, PW / 2 + (tx - PW / 2) * 0.6, 0.5); }
+          if (cyc > 0.86) { g = bk.off + 2; early = true; } else if (cyc > 0.35) { g = Math.max(g, bk.off - 0.8); tx = lerp(tx, PW / 2 + (tx - PW / 2) * 0.6, 0.5); }
           else if (cyc < -0.45) { g = Math.min(g, hg + 11); tx = lerp(tx, h.x, 0.35); }
         } else if (ro.r < 0.15 && Math.abs(ro.fx - 0.5) > 0.3 && hg > PL * 0.5 && Math.sign(h.x - PW / 2) === Math.sign(ro.fx - 0.5)) {
           g = Math.max(g, Math.min(hg + 3, bk.off - 2)); tx = ro.fx < 0.5 ? 4 : PW - 4; // bek bindirmesi
@@ -527,12 +581,13 @@ export function simulateMatch(fx, events, R, ins = {}) {
           tx = lerp(tx, clamp(h.x + sideX, 4, PW - 4), 0.55); g = lerp(g, hg + (pe.oy > 0 ? 9 : 2), 0.55);
         }
       }
-      if (bk.own) g = Math.min(g, bk.off - 1.2);
+      if (own && t - won[s] < 4.5 && ro.r >= 0.45 && k > 0) { g += 9 * ro.r; } // kontra: öne koşu
+      if (bk.own && !early) g = Math.min(g, bk.off - 1.2);
       tx = clamp(tx, 2.5, PW - 2.5);
       ty = Yg(s, clamp(g, 7, PL - 6));
       { // geride kalan oyuncu hücuma / savunmaya koşarak yetişir
         const lag = g - G(s, p.y);
-        if (own && lag > 14) vmax = SPRINT * 0.95; else if (own && lag > 6) vmax = RUN;
+        if (own && (lag > 14 || (lag > 5 && t - won[s] < 4.5))) vmax = SPRINT * 0.95; else if (own && lag > 6) vmax = RUN;
         else if (Math.abs(lag) > 6 || Math.abs(p.x - tx) > 10) vmax = RUN * 0.85;
       }
 
@@ -547,11 +602,11 @@ export function simulateMatch(fx, events, R, ins = {}) {
         const me = mode?.e;
         if (j === holder) {
           // top sürme: boşluğa doğru; önemli anda şutçu kaleye, kanatçı çizgiye
-          tx = p.x + (PW / 2 - p.x) * 0.05; ty = Yg(s, Math.min(G(s, p.y) + 4, Math.max(G(s, p.y), PL - 22))); vmax = JOG * 0.85;
+          tx = p.x + (PW / 2 - p.x) * 0.05; ty = Yg(s, Math.min(G(s, p.y) + 5, Math.max(G(s, p.y), PL - 22))); vmax = JOG;
           { // baskı varsa topu kendinden uzaklaştırır, önü boşsa hızla taşır
             const op = nearest(other(s), p, false), od = dist(P[op], p);
             if (od < 3.2 && !(mode && mode.s !== s)) { const ax = p.x - P[op].x, ay = p.y - P[op].y, L = Math.hypot(ax, ay) || 1; tx = p.x + ax / L * 4 + (PW / 2 - p.x) * 0.15; ty = p.y + ay / L * 2 + dirY(s) * 2; vmax = JOG * 0.8; }
-            else if (od > 9 && G(s, p.y) < PL - 25) { ty = Yg(s, G(s, p.y) + 8); vmax = RUN * 0.75; }
+            else if (od > 7 && G(s, p.y) < PL - 25) { ty = Yg(s, G(s, p.y) + 10); vmax = RUN * (t - won[s] < 4.5 ? 0.95 : 0.82); }
           }
           if (side[j] && t < side[j].until) { tx = side[j].x; ty = side[j].y; vmax = SPRINT; } // çalımla sıyrılış
           tx = clamp(tx, 2, PW - 2); ty = clamp(ty, 2, PL - 2);
@@ -573,7 +628,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
             if (me.style === 'pen' && !inBox) { tx = W.x + (PW / 2 - W.x) * 0.1; ty = W.y + dirY(me.s) * 2.2; vmax = RUN; }
             else { tx = W.x; ty = W.y; vmax = SPRINT; }
           }
-        } else if (me && me.pre && j === me.pre.W && holder !== j) { tx = me.pre.tp.x; ty = me.pre.tp.y; vmax = RUN; }
+        } else if (me && me.pre && j === me.pre.W && holder !== j) { tx = me.pre.tp.x; ty = flight?.to === j ? me.pre.tp.y : Yg(me.s, Math.min(G(me.s, me.pre.tp.y), offLine(me.s) - 0.7)); vmax = RUN; }
         else if (lunge[j] && t < lunge[j].until) { tx = lunge[j].x; ty = lunge[j].y; vmax = SPRINT; } // müdahaleye dalış
         else if (j === p1) { // topa bas: adamın 1 m önünde, kale tarafında
           const h = P[holder], gl = goalY(other(s));
@@ -587,8 +642,8 @@ export function simulateMatch(fx, events, R, ins = {}) {
           tx = lerp(tx, a.x + (PW / 2 - a.x) / L * 1.8, 0.75); ty = lerp(ty, a.y + dy / L * 1.8, 0.75); vmax = RUN;
         } else if (me && me.s === s) { // hücum koşuları
           if (j === me.shooter && me.spot) {
-            const late = me.T - t < 2.2 || flight?.to === j;
-            ty = late ? me.spot.y : Yg(s, Math.min(G(s, me.spot.y), offLine(s) - 0.8)); tx = me.spot.x; vmax = late ? SPRINT : RUN;
+            const late = me.T - t < 2.2, coming = flight?.to === j;
+            ty = coming ? me.spot.y : Yg(s, Math.min(G(s, me.spot.y), offLine(s) - 0.7)); tx = me.spot.x; vmax = late || coming ? SPRINT : RUN;
           } else if (j === me.winger) { tx = mode.wx; ty = Yg(s, Math.min(PL - 12, offLine(s) - 1)); vmax = RUN; }
           else if (holder !== null && sideOf(holder) === s && roles[s][k].r > 0.3) { // destek: topun 10-15 m önü/çaprazı
             const h = P[holder]; const side = p.x < h.x ? -1 : 1;
@@ -705,7 +760,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
     if (e.crossT !== undefined) e.crossT /= SPM;
   }
   for (const f of fouls) f.tf = f.T / SPM;
-  return { frames, N, evs: shots, T_END: T_END / SPM, fouls, corners, DT };
+  return { frames, N, evs: shots, T_END: T_END / SPM, fouls, corners, offsides, DT };
 }
 
 // t (dakika) anındaki kare, iki kare arası yumuşak geçiş

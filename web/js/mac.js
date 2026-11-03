@@ -493,6 +493,7 @@ export async function openMatch(sb, fid, opts) {
   {
     const pick = (a) => a[Math.floor(R() * a.length)];
     const who = (t, j) => { const lu = lineupAt(t); const id = lu.ids[j < 11 ? 'h' : 'a'][j % 11]; return id ? (names.get(id) || '').split(' ').pop() : ''; };
+    for (const o of sim.offsides || []) if (o.t < 95) { others.push({ m: o.t, t: o.t, s: o.s, ev: 'offside', txt: who(o.t, o.p) }); setp.push({ t: o.t, s: o.s, k: 'o' }); }
     for (const e of evs) {
       if (!clipEv.has(e)) continue;
       const t0 = Math.max(0.1, e.from ?? e.t - 2), t1 = e.setT ?? e.t;
@@ -599,6 +600,7 @@ export async function openMatch(sb, fid, opts) {
       txt = `Faul: ${e.p ? nm(e.p) : 'savunmacı'}${e.w ? `, ${nm(e.w)}${trEk(names.get(e.w), 'acc')} düşürdü` : ''} · serbest vuruş`; cls = 'fk';
       if (!silent) flash('FAUL · SERBEST VURUŞ', { c1: '#111827', c2: '#f59e0b' });
     }
+    else if (e.ev === 'offside') { txt = `Ofsayt${e.txt ? `: ${esc(e.txt)}` : ''} · yan hakem bayrağı kaldırdı`; cls = 'off'; if (!silent && phase === 'clip') flash('OFSAYT', { c1: '#111827', c2: '#fde047' }); }
     else if (e.ev === 'yellow') { txt = `${nm(e.p)}`; cls = 'yellow'; }
     else if (e.ev === 'red') { txt = `<b>Kırmızı kart!</b> ${nm(e.p)}`; cls = 'red'; if (!silent) flash(`KIRMIZI KART · ${names.get(e.p) || ''}`, { c1: '#dc2626', c2: '#ffffff' }); }
     else if (e.ev === 'injury') { txt = `${nm(e.p)} sakatlandı`; cls = 'injury'; }
@@ -624,7 +626,7 @@ export async function openMatch(sb, fid, opts) {
       ${bar(final ? st.shots?.[0] ?? ls.shots[0] : ls.shots[0], final ? st.shots?.[1] ?? ls.shots[1] : ls.shots[1], 'Şut')}
       ${bar(final ? st.on?.[0] ?? ls.on[0] : ls.on[0], final ? st.on?.[1] ?? ls.on[1] : ls.on[1], 'İsabetli şut')}
       ${(() => { const upto = final ? 999 : clock, cnt = (sd, k) => setp.filter((x) => x.s === sd && x.k === k && x.t <= upto).length;
-        return bar(cnt('h', 'c'), cnt('a', 'c'), 'Korner') + bar(cnt('h', 'f'), cnt('a', 'f'), 'Faul'); })()}
+        return bar(cnt('h', 'c'), cnt('a', 'c'), 'Korner') + bar(cnt('h', 'f'), cnt('a', 'f'), 'Faul') + bar(cnt('h', 'o'), cnt('a', 'o'), 'Ofsayt'); })()}
       ${final ? (() => { // şutların nereden geldiği
         const row = (sd) => Object.entries(styleName).map(([k, n]) => [n, evs.filter((e) => e.s === sd && e.style === k).length, evs.filter((e) => e.s === sd && e.style === k && e.ev === 'goal').length]).filter((x) => x[1] > 0)
           .map(([n, c, g]) => `<span class="chip">${n} <b>${c}</b>${g ? ` · ${g} gol` : ''}</span>`).join('') || '<span class="muted">—</span>';
