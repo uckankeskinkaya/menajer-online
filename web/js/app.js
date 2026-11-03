@@ -59,7 +59,7 @@ function renewCost(sq, years) {
 }
 function statusBadges(sq) {
   if (!sq) return '';
-  return `${sq.injury > 0 ? `<span class="tag bad" title="Sakat">🚑 ${sq.injury}h</span>` : ''}${sq.ban > 0 ? `<span class="tag bad" title="Cezalı">🟥 ${sq.ban}m</span>` : ''}${sq.yellows >= 4 ? '<span class="tag warn" title="Bir sarı daha cezalı">🟨4</span>' : ''}${sq.contract !== undefined && sq.contract <= 0 ? '<span class="tag warn" title="Sözleşmesi bu sezon bitiyor">📝</span>' : ''}`;
+  return `${sq.injury > 0 ? `<span class="tag bad" title="Sakat">🚑 ${sq.injury}h</span>` : ''}${sq.ban > 0 ? `<span class="tag bad" title="Cezalı">🟥 ${sq.ban}m</span>` : ''}${sq.yellows >= 4 ? '<span class="tag warn" title="Bir sarı daha cezalı">🟨4</span>' : ''}${sq.loan_from ? `<span class="tag cup" title="${esc(sq.loan_from)} kulübünden sezon sonuna kadar kiralık">🤝 Kiralık</span>` : sq.contract !== undefined && sq.contract <= 0 ? '<span class="tag warn" title="Sözleşmesi bu sezon bitiyor">📝</span>' : ''}`;
 }
 const fitBar = (f) => `<span class="fit" title="Kondisyon %${f}"><i style="width:${f}%" class="${f >= 80 ? 'hi' : f >= 60 ? 'mid' : 'lo'}"></i></span>`;
 const bidderName = (o) => (o.bidder ? tname(o.bidder) : `🤖 ${o.ai_club || 'Yapay zeka kulübü'}`);
@@ -1237,7 +1237,8 @@ async function playerModal(pid) {
     ${mine ? '' : scoutReport(p)}
     ${owned ? `<div class="pinfo">${statusBadges(owned)}<span>Kondisyon ${fitBar(owned.fitness)} %${owned.fitness}</span><span>Form <b>${Number(owned.form).toFixed(1)}</b></span>${owned.yellows ? `<span>🟨 ${owned.yellows}</span>` : ''}
       ${owned.morale !== undefined ? `<span>Moral ${MORALE(owned.morale)[0]} <b>${MORALE(owned.morale)[1]}</b></span>` : ''}${owned.contract !== undefined ? `<span>Sözleşme: <b>${contractTxt(owned.contract)}</b></span>` : ''}</div>` : ''}
-    ${mine && owned.contract !== undefined && S.game.status !== 'lobby' ? `<div class="renew">
+    ${mine && owned.loan_from ? `<p class="small center">🤝 <b>${esc(owned.loan_from)}</b> kulübünden sezon sonuna kadar kiralık. Satılamaz; sezon bitince kulübüne döner.</p>` : ''}
+    ${mine && !owned.loan_from && owned.contract !== undefined && S.game.status !== 'lobby' ? `<div class="renew">
       <label>Sözleşme uzat <select id="rnY">${[1, 2, 3, 4].map((y) => `<option value="${y}">${y} yıl</option>`).join('')}</select></label>
       <small class="muted" id="rnCost"></small>
       <button class="btn sm primary" id="rnGo" type="button">Uzat</button></div>` : ''}
@@ -1246,7 +1247,7 @@ async function playerModal(pid) {
     ${mine ? `
       ${offers.filter((o) => o.seller === me().id).map((o) => `<div class="offer-in">💌 ${esc(bidderName(o))}: <b>${money(o.amount)}</b>
         <button class="btn sm primary" data-acc="${o.id}">Kabul</button><button class="btn sm ghost" data-rej="${o.id}">Ret</button></div>`).join('')}
-      ${active ? `<button class="btn danger ghost" id="pSell">Yapay zekaya sat: ${money(Math.floor(value * (S.game.settings.ai_sell_ratio || 0.75)))}</button>` : ''}`
+      ${active && !owned.loan_from ? `<button class="btn danger ghost" id="pSell">Yapay zekaya sat: ${money(Math.floor(value * (S.game.settings.ai_sell_ratio || 0.75)))}</button>` : ''}`
     : active ? `
       <form id="bidForm" class="form" data-live>
         ${me()?.wage_budget > 0 ? `<p class="small ${wageBill(me().id) + wageOf(value) > me().wage_budget ? 'warn' : 'muted'}">Maaş talebi ~${money(wageOf(value))}/hafta · boş maaş bütçen ${money(Math.max(0, me().wage_budget - wageBill(me().id)))}/hafta</p>` : ''}
@@ -1260,7 +1261,13 @@ async function playerModal(pid) {
         <p class="muted small" id="bidHint">${owner?.is_bot ? `${esc(owner.name)} yapay zeka takımı; teklifi hemen kabul ya da reddeder.` : owner ? `Karar ${esc(owner.name)} menajerinde. Değerin altına teklif yapılamaz.` : auction ? 'Geçmek için en az %5 fazlası gerekir. Son dakikadaki teklif süreyi uzatır.' : `${esc(p.club)} istediği fiyatın altını kabul etmez; kabul ederse ${S.game.settings.bid_minutes} dk açık artırma başlar.`}</p>
         ${myOffer ? `<p class="small">Mevcut teklifin: <b>${money(myOffer.amount)}</b></p>` : ''}
         <button class="btn primary big" type="submit">Teklif ver</button>
-      </form>` : ''}
+      </form>
+      ${'loan_from' in (S.own.values().next().value || {}) && (!owner || (owner.is_bot && !owned?.loan_from)) && !auction && !myOffer ? (() => {
+        const fee = Math.max(100000, Math.round((value * 0.1) / 100000) * 100000);
+        const starter = owner && (owner.lineup || []).includes(pid);
+        return `<div class="loanbox"><b>🤝 Kiralık al</b><p class="small muted">Sezon sonuna kadar. Bedel ${money(fee)} (değerin %10'u), maaşı ~${money(wageOf(value))}/hafta sen ödersin; sezon bitince kulübüne döner. En fazla 4 kiralık.</p>
+          ${starter ? `<p class="small warn">${esc(owner.name)} ilk 11 oyuncusunu kiralık vermez.</p>` : `<button class="btn" type="button" id="pLoan">Kirala: ${money(fee)}</button>`}</div>`;
+      })() : ''}` : ''}
     ${S.game.status === 'active' && !windowOpen() ? '<p class="muted small center">🔒 Transfer dönemi kapalı</p>' : ''}
     <button class="btn ghost" data-close>Kapat</button>`, {
     onMount: (box, close) => {
@@ -1286,6 +1293,12 @@ async function playerModal(pid) {
             if (r.ask) form.amt.value = money(r.ask).replace('€', '');
           }
         } catch (err) { toast(errText(err), 'err'); } finally { btn.disabled = false; }
+      };
+      const loan = box.querySelector('#pLoan');
+      if (loan) loan.onclick = async () => {
+        loan.disabled = true;
+        const r = await act('loan_player', { p_game: S.gameId, p_player: pid });
+        if (r?.ok) close(); else loan.disabled = false;
       };
       const sell = box.querySelector('#pSell');
       if (sell) sell.onclick = async () => {

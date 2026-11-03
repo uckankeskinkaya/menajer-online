@@ -397,3 +397,5 @@ legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
 .xpbar i { display: block; height: 100%; background: linear-gradient(90deg, #38bdf8, #22c55e); border-radius: inherit; }
 .scout { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
 .scout ul { margin: 6px 0 0; padding-left: 18px; } .scout li { margin: 3px 0; }
+.loanbox { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+.loanbox p { margin: 6px 0; }
