@@ -619,3 +619,4 @@ label { font-weight: 600; }
 }
 @media (orientation: landscape) and (max-height: 520px) { .mwrap.land .mstage, .mwrap.land .mstage.is3d { height: calc(100dvh - 112px); } }
 @media (max-width: 440px) { .mctrl { gap: 4px; } .mctrl .btn.sm { padding: 6px 7px; } .mctrl .seg.sm button { padding: 6px 6px; } }
+.fe.off .fi { background: #fde047; clip-path: polygon(0 0, 100% 25%, 0 55%); border-radius: 0; }
