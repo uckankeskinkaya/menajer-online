@@ -22,11 +22,11 @@ function drawPitch(ctx, L, T, w, h) {
   // çim: biçilmiş şeritler + hafif doku
   const bands = 14;
   for (let i = 0; i < bands; i++) {
-    ctx.fillStyle = i % 2 ? '#2d7a33' : '#33873a';
+    ctx.fillStyle = i % 2 ? '#56a443' : '#5fae4a';
     ctx.fillRect(L, T + (i * h) / bands, w, h / bands + 1);
   }
   const g = ctx.createRadialGradient(L + w / 2, T + h / 2, Math.min(w, h) * 0.2, L + w / 2, T + h / 2, Math.max(w, h) * 0.75);
-  g.addColorStop(0, 'rgba(255,255,255,0.04)'); g.addColorStop(1, 'rgba(0,0,0,0.22)');
+  g.addColorStop(0, 'rgba(255,255,255,0.05)'); g.addColorStop(1, 'rgba(0,0,0,0.12)');
   ctx.fillStyle = g; ctx.fillRect(L, T, w, h);
   const X = (x) => L + x * w, Y = (y) => T + y * h, mx = (m) => (m / PW) * w, my = (m) => (m / PL) * h;
   ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.fillStyle = 'rgba(255,255,255,.9)';
@@ -80,14 +80,12 @@ class Pitch2D {
     this.cv.width = this.W * dpr; this.cv.height = this.H * dpr;
     this.cv.style.width = `${this.W}px`; this.cv.style.height = `${this.H}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.land = this.W > this.H * 1.1; // yatay ekran: saha yatay, ev sahibinin kalesi solda
-    if (this.land) {
-      const gd = Math.max(7, this.W * 0.016), m = Math.max(8, this.H * 0.035);
-      this.L = m + gd; this.T = m; this.w = this.W - 2 * (m + gd); this.h = this.H - 2 * m; this.gd = gd;
-    } else {
-      const gd = Math.max(7, this.H * 0.018), m = Math.max(8, this.W * 0.03);
-      this.L = m; this.T = m + gd; this.w = this.W - 2 * m; this.h = this.H - 2 * (m + gd); this.gd = gd;
-    }
+    this.land = true; // saha hep yatay (geniş yayın görünümü), ev sahibinin kalesi solda
+    const ar = PL / PW, mT = Math.max(6, this.H * 0.035), stand = Math.max(10, this.W * 0.055);
+    let h = this.H - 2 * mT, w = h * ar, gd = Math.max(5, h * 0.03);
+    const maxW = this.W - 2 * (gd + stand);
+    if (w > maxW) { w = maxW; h = w / ar; gd = Math.max(5, h * 0.03); }
+    this.w = w; this.h = h; this.gd = gd; this.L = (this.W - w) / 2; this.T = (this.H - h) / 2;
     this.dpr = dpr;
   }
   draw(st) {
@@ -96,7 +94,16 @@ class Pitch2D {
     const SX = (p) => (land ? L + (1 - p.y) * w : L + p.x * w), SY = (p) => (land ? T + p.x * h : T + p.y * h);
     const side = land ? h : w; // sahanın eni (68 m) piksel
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#1d5a23'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#4c9a3c'; ctx.fillRect(0, 0, W, H); // saha kenarı çimi
+    { // tribünler: kale arkalarında koyu bloklar, ince koltuk sıraları
+      const sw = Math.max(8, L - this.gd - Math.max(6, W * 0.012)), sy = Math.max(4, T * 0.6), sh = H - 2 * sy;
+      for (const x0 of [Math.max(3, W * 0.006), W - Math.max(3, W * 0.006) - sw]) {
+        ctx.fillStyle = '#2a2b31'; ctx.fillRect(x0, sy, sw, sh);
+        ctx.fillStyle = 'rgba(255,255,255,.035)';
+        for (let x = x0 + 3; x < x0 + sw - 2; x += 5) ctx.fillRect(x, sy, 2, sh);
+        ctx.fillStyle = '#16171b'; ctx.fillRect(x0 === Math.max(3, W * 0.006) ? x0 + sw - 3 : x0, sy, 3, sh);
+      }
+    }
     { // saha çizgileri: dikey çizilir, yatay ekranda döndürülür
       ctx.save();
       const vw = land ? h : w, vh = land ? w : h, vL = land ? -h / 2 : L, vT = land ? -w / 2 : T;
@@ -529,6 +536,7 @@ export async function openMatch(sb, fid, opts) {
       <button class="btn sm" id="mNames" title="Oyuncu isimleri">Aa</button>
       <button class="btn sm" id="mNext" title="Sonraki an">⏩</button>
       <button class="btn sm" id="mEnd" title="Sona atla">⏭</button>
+      ${document.fullscreenEnabled ? '<button class="btn sm" id="mFull" title="Tam ekran (yatay)">⛶</button>' : ''}
     </div>
     ${live ? '' : '<div class="seg sm mview" id="mView"><button data-v="ozet">Önemli anlar</button><button data-v="tam">Tam maç</button></div>'}
     <div class="mstats" id="mStats"></div>
@@ -858,6 +866,14 @@ export async function openMatch(sb, fid, opts) {
       try { localStorage.setItem('mac-tam', full ? '1' : '0'); } catch { /* yok */ }
     }));
   }
+  const fullBtn = document.getElementById('mFull');
+  if (fullBtn) fullBtn.onclick = async () => {
+    try {
+      if (document.fullscreenElement) { await document.exitFullscreen(); return; }
+      await root.requestFullscreen();
+      await screen.orientation?.lock?.('landscape').catch(() => {});
+    } catch { /* desteklenmiyor */ }
+  };
   document.getElementById('mEnd').onclick = () => { pauseT = 0; if (htMode) { clock = 45; tm = Math.max(tm, 44.9); } else finish(); };
   document.getElementById('mClose').onclick = close;
   statsHtml();
