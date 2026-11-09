@@ -456,7 +456,9 @@ export async function openMatch(sb, fid, opts) {
   // topa sahip olma: simülasyon karelerinden birikimli (ev sahibi payı)
   const possCum = new Float32Array(sim.N + 1), possTot = new Float32Array(sim.N + 1);
   for (let i = 0; i < sim.N; i++) { const hh = sim.frames[i * FRAME + 47]; possCum[i + 1] = possCum[i] + (hh >= 0 && hh < 11 ? 1 : 0); possTot[i + 1] = possTot[i] + (hh >= 0 ? 1 : 0); }
-  const possAt = (tMin) => { const i = clamp(Math.floor((tMin * SPM) / sim.DT), 1, sim.N); return possTot[i] > 40 ? possCum[i] / possTot[i] : 0.5; };
+  // canlı çubuk sunucunun maç sonu oranına oturur: sahadaki gidişat (birikimli pay − maç sonu payı) kadar oynar
+  const possEnd = possTot[sim.N] > 40 ? possCum[sim.N] / possTot[sim.N] : 0.5, possSrv = fx.stats?.poss ? clamp(fx.stats.poss[0] / 100, 0.2, 0.8) : possEnd;
+  const possAt = (tMin) => { const i = clamp(Math.floor((tMin * SPM) / sim.DT), 1, sim.N); return possTot[i] > 40 ? clamp(possSrv + (possCum[i] / possTot[i] - possEnd) * 0.6, 0.15, 0.85) : possSrv; };
   const others = events.filter((e) => !SHOTS.includes(e.ev)).map((e) => ({ ...e, t: e.tf ?? e.m + 0.2 }));
   // duran top anları: düdük (penaltı / serbest vuruş)
   for (const e of evs) if (e.setT !== undefined) others.push({ m: e.m, t: e.setT, s: e.s, ev: e.style === 'pen' ? 'penfoul' : 'fkfoul', p: e.f, a: e.p, w: e.w, c: e.c });
@@ -625,7 +627,7 @@ export async function openMatch(sb, fid, opts) {
       const start = (sd === 'h' ? st.lh : st.la) || [];
       const subs = (fx.events || []).filter((e) => e.t === 'sub' && e.s === sd);
       const out = new Set(subs.map((e) => e.p));
-      const line = (id, sub) => `<div class="lp ${id === st.motm ? 'star' : ''}"><span class="no">${num(id)}</span><span class="nmx">${sub ? '↳ ' : ''}${nm(id)}${out.has(id) ? ' <i class="out">▼</i>' : ''}${id === st.motm ? ' ⭐' : ''}</span>${st.rt?.[id] != null ? `<b class="rt ${st.rt[id] >= 7.5 ? 'hi' : st.rt[id] < 6 ? 'lo' : ''}">${Number(st.rt[id]).toFixed(1)}</b>` : ''}</div>`;
+      const line = (id, sub) => `<div class="lp ${id === st.motm ? 'star' : ''}"><span class="no">${num(id)}</span><span class="nmx">${sub ? '↳ ' : ''}${nm(id)}${out.has(id) ? ' <i class="out">▼</i>' : ''}${id === st.motm ? ' <i class="mstar">★</i>' : ''}</span>${st.rt?.[id] != null ? `<b class="rt ${st.rt[id] >= 7.5 ? 'hi' : st.rt[id] < 6 ? 'lo' : ''}">${Number(st.rt[id]).toFixed(1)}</b>` : ''}</div>`;
       return `<div><div class="lhead">${crestSVG(sd === 'h' ? H : A, 18)} ${esc((sd === 'h' ? st.fh : st.fa) || '')}</div>${start.map((id) => line(id)).join('')}${subs.map((e) => line(e.a, true)).join('')}</div>`;
     };
     document.getElementById('mStats').innerHTML = `
@@ -633,7 +635,10 @@ export async function openMatch(sb, fid, opts) {
       ${bar(final ? st.shots?.[0] ?? ls.shots[0] : ls.shots[0], final ? st.shots?.[1] ?? ls.shots[1] : ls.shots[1], 'Şut')}
       ${bar(final ? st.on?.[0] ?? ls.on[0] : ls.on[0], final ? st.on?.[1] ?? ls.on[1] : ls.on[1], 'İsabetli şut')}
       ${(() => { const upto = final ? 999 : clock, cnt = (sd, k) => setp.filter((x) => x.s === sd && x.k === k && x.t <= upto).length;
-        return bar(cnt('h', 'c'), cnt('a', 'c'), 'Korner') + bar(cnt('h', 'f'), cnt('a', 'f'), 'Faul') + bar(cnt('h', 'o'), cnt('a', 'o'), 'Ofsayt'); })()}
+        const ps = (sd, ok) => sim.passes.filter((x) => x.s === sd && x.t <= upto && (!ok || x.ok)).length, pct = (sd) => (ps(sd) ? Math.round((ps(sd, 1) / ps(sd)) * 100) : 0);
+        const tk = (sd) => sim.tackles.filter((x) => x.s === sd && x.t <= upto).length;
+        return bar(ps('h'), ps('a'), 'Pas') + bar(pct('h'), pct('a'), 'Pas isabeti %') + bar(tk('h'), tk('a'), 'Top kapma')
+          + bar(cnt('h', 'c'), cnt('a', 'c'), 'Korner') + bar(cnt('h', 'f'), cnt('a', 'f'), 'Faul') + bar(cnt('h', 'o'), cnt('a', 'o'), 'Ofsayt'); })()}
       ${final ? (() => { // şutların nereden geldiği
         const row = (sd) => Object.entries(styleName).map(([k, n]) => [n, evs.filter((e) => e.s === sd && e.style === k).length, evs.filter((e) => e.s === sd && e.style === k && e.ev === 'goal').length]).filter((x) => x[1] > 0)
           .map(([n, c, g]) => `<span class="chip">${n} <b>${c}</b>${g ? ` · ${g} gol` : ''}</span>`).join('') || '<span class="muted">—</span>';
@@ -932,7 +937,7 @@ export async function openMatch(sb, fid, opts) {
     box.innerHTML = `<h2>⏸ ${liveCh ? `Müdahale · ${minute}'` : 'Devre arası'} · ${sh} - ${sa}</h2>
       ${liveCh ? `<p class="small muted">Değişiklikler ${snapKey + 1}. dakikada oyuna girer; maç oradan yeni kararlarınla devam eder.</p>` : `<h3>Takım konuşması</h3><div class="col" id="htTalk">${T.map((x, i) => `<button class="btn" type="button" data-t="${i}">“${x}”</button>`).join('')}</div>`}
       <h3>Oyuncu değişikliği <small class="muted">(kalan hak ${left})</small></h3>
-      <div class="htsubs">${lu.map((id, i) => `<div class="htrow"><span class="pos">${sl[i] || ''}</span><b>${esc(names.get(id) || '?')}</b>${reds.has(id) ? ' 🟥' : inj.has(id) ? ' 🚑' : ''}
+      <div class="htsubs">${lu.map((id, i) => `<div class="htrow"><span class="pos">${sl[i] || ''}</span><b>${esc(names.get(id) || '?')}</b>${reds.has(id) ? ' <i class="cd r"></i>' : inj.has(id) ? ' <i class="inj">+</i>' : ''}
         ${reds.has(id) || left <= 0 ? '' : `<select data-i="${i}"><option value="">—</option>${bench.filter((p) => p.grp === sl[i] || sl[i] === undefined).concat(bench.filter((p) => p.grp !== sl[i] && p.grp !== 'GK' && sl[i] !== 'GK')).map((p) => `<option value="${p.id}">${esc(p.name)} (${p.ovr}${p.grp !== sl[i] ? ', ' + p.grp : ''})</option>`).join('')}</select>`}</div>`).join('')}</div>
       <h3>Oyun anlayışı</h3><select id="htMent">${[-2, -1, 0, 1, 2].map((v) => `<option value="${v}" ${v === (me?.mentality ?? 0) ? 'selected' : ''}>${MENTALITY[v]}</option>`).join('')}</select>
       <h3>Talimatlar</h3><div class="instr" id="htIns">${segRow('press', 'Pres', ['Düşük', 'Normal', 'Yüksek'])}${segRow('tempo', 'Tempo', ['Yavaş', 'Normal', 'Hızlı'])}${segRow('width', 'Genişlik', ['Dar', 'Normal', 'Geniş'])}</div>

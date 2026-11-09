@@ -620,3 +620,17 @@ label { font-weight: 600; }
 @media (orientation: landscape) and (max-height: 520px) { .mwrap.land .mstage, .mwrap.land .mstage.is3d { height: calc(100dvh - 112px); } }
 @media (max-width: 440px) { .mctrl { gap: 4px; } .mctrl .btn.sm { padding: 6px 7px; } .mctrl .seg.sm button { padding: 6px 6px; } }
 .fe.off .fi { background: #fde047; clip-path: polygon(0 0, 100% 25%, 0 55%); border-radius: 0; }
+
+/* ---- v3 rötuş: emoji yerine işaretler, kondisyon renkleri ---- */
+.fit i.hi { background: #22c55e; } .fit i.mid { background: #f59e0b; } .fit i.lo { background: #ef4444; }
+.mo { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 3px; font-size: 8px; line-height: 1; color: #06080b; vertical-align: middle; margin-right: 3px; }
+.mo.m5 { background: #22c55e; } .mo.m4 { background: #86efac; } .mo.m3 { background: #94a3b8; } .mo.m2 { background: #f59e0b; } .mo.m1 { background: #ef4444; }
+.news .nic { flex: none; display: grid; place-items: center; width: 28px; height: 28px; background: var(--card2); color: var(--muted); clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%); }
+.news.priv .nic { color: #fde68a; } .news.k-champion .nic, .news.k-cup .nic { color: #facc15; } .news.k-outbid .nic { color: #f87171; }
+.as-av { display: grid; place-items: center; color: var(--acc); }
+h2 > .ico { vertical-align: -3px; margin-right: 4px; }
+.livedot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: lpulse 1.1s infinite; }
+@keyframes lpulse { 50% { opacity: .3; } }
+.cd { display: inline-block; width: 8px; height: 11px; border-radius: 1.5px; vertical-align: -1px; } .cd.y { background: #facc15; } .cd.r { background: #ef4444; }
+.inj { display: inline-grid; place-items: center; width: 12px; height: 12px; border-radius: 2px; background: #ef4444; color: #fff; font: 900 11px/1 system-ui; font-style: normal; vertical-align: -1px; }
+.mstar { color: #facc15; font-style: normal; }
