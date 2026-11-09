@@ -10,8 +10,8 @@ export const SPM = 3.3; // 1x hızda 1 maç dakikası kaç saniye
 export const PL = 105, PW = 68;
 const DT = 0.05;
 export const FRAME = 52;
-// kale, oyuncu dairelerine oranla küçük kalmasın diye gerçeğinden büyük çizilir (13.6 m × 3.8 m)
-export const GOAL = 13.6, GOALH = 3.8;
+// kale, oyuncu dairelerine oranla küçük kalmasın diye gerçeğinden büyük çizilir (12.8 m × 3.6 m)
+export const GOAL = 12.8, GOALH = 3.6;
 const CX = PW / 2, GOALW = GOAL / 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const hyp = Math.hypot;
