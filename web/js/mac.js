@@ -5,7 +5,7 @@
 import { esc, slotPositions, teamStyle, slots } from './ui.js';
 import { MENTALITY } from './config.js';
 import { matchKits, drawDot, crestSVG, numColor, lum } from './kit.js';
-import { simulateMatch, frameAt, holderAt, SPM, FRAME } from './sim.js';
+import { simulateMatch, frameAt, holderAt, SPM, FRAME, GOAL, GOALH } from './sim.js';
 
 const GOAL_W = 7.32 / 68;      // kale ağzı (saha enine oranla)
 const PL = 105, PW = 68;       // metre
@@ -59,7 +59,7 @@ function drawPitch(ctx, L, T, w, h) {
   }
 }
 function drawGoals(ctx, L, T, w, h, depth) {
-  const gw = (7.32 / PW) * w;
+  const gw = (GOAL / PW) * w;
   for (const top of [true, false]) {
     const x = L + w / 2 - gw / 2, y = top ? T - depth : T + h;
     ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x, y, gw, depth);
@@ -82,9 +82,9 @@ class Pitch2D {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.land = true; // saha hep yatay (geniş yayın görünümü), ev sahibinin kalesi solda
     const ar = PL / PW, mT = Math.max(6, this.H * 0.035), stand = Math.max(10, this.W * 0.055);
-    let h = this.H - 2 * mT, w = h * ar, gd = Math.max(5, h * 0.03);
+    let h = this.H - 2 * mT, w = h * ar, gd = Math.max(6, h * 0.04);
     const maxW = this.W - 2 * (gd + stand);
-    if (w > maxW) { w = maxW; h = w / ar; gd = Math.max(5, h * 0.03); }
+    if (w > maxW) { w = maxW; h = w / ar; gd = Math.max(6, h * 0.04); }
     this.w = w; this.h = h; this.gd = gd; this.L = (this.W - w) / 2; this.T = (this.H - h) / 2;
     this.dpr = dpr;
   }
@@ -111,7 +111,7 @@ class Pitch2D {
       drawPitch(ctx, vL, vT, vw, vh);
       drawGoals(ctx, vL, vT, vw, vh, this.gd);
       if (Math.abs(st.ripple || 0) > 0.02) { // gol: file dalgalanır
-        const rp = Math.abs(st.ripple), top = st.ripple > 0, gw = (7.32 / PW) * vw, gx = vL + vw / 2 - gw / 2, d0 = this.gd;
+        const rp = Math.abs(st.ripple), top = st.ripple > 0, gw = (GOAL / PW) * vw, gx = vL + vw / 2 - gw / 2, d0 = this.gd;
         const y0 = top ? vT - d0 : vT + vh, wave = Math.sin(performance.now() / 45) * d0 * 0.35 * rp;
         ctx.fillStyle = `rgba(255,255,255,${0.35 * rp})`; ctx.fillRect(gx, y0 + (top ? -wave : wave) * 0.5, gw, d0);
         ctx.strokeStyle = `rgba(255,255,255,${0.7 * rp})`; ctx.lineWidth = 1;
@@ -278,9 +278,9 @@ class Pitch3D {
     const netMat = new THREE.MeshBasicMaterial({ color: '#ffffff', wireframe: true, transparent: true, opacity: 0.45 });
     for (const zs of [-1, 1]) {
       const z = (zs * PL) / 2, g = new THREE.Group();
-      for (const xs of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2.44, 12), postMat); p.position.set((xs * 7.32) / 2, 1.22, z); g.add(p); }
-      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 7.32, 12), postMat); bar.rotation.z = Math.PI / 2; bar.position.set(0, 2.44, z); g.add(bar);
-      const net = new THREE.Mesh(new THREE.BoxGeometry(7.32, 2.44, 2, 12, 4, 3), netMat); net.position.set(0, 1.22, z + zs * 1); g.add(net);
+      for (const xs of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, GOALH, 12), postMat); p.position.set((xs * GOAL) / 2, GOALH / 2, z); g.add(p); }
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, GOAL, 12), postMat); bar.rotation.z = Math.PI / 2; bar.position.set(0, GOALH, z); g.add(bar);
+      const net = new THREE.Mesh(new THREE.BoxGeometry(GOAL, GOALH, 2.6, 16, 5, 3), netMat); net.position.set(0, GOALH / 2, z + zs * 1.3); g.add(net);
       (this.nets ||= {})[zs] = net;
       scene.add(g);
     }
@@ -335,7 +335,7 @@ class Pitch3D {
     const sp = new THREE.Sprite(this.badge(kit, st.num(st.ids[s][i])));
     sp.scale.set(2.4, 2.4, 1); sp.position.y = 4.6; sp.renderOrder = 10; g.add(sp);
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), this.shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; g.add(sh);
-    g.scale.setScalar(0.6);   // ~1.85 m: kale (2.44 m) ile gerçek oran
+    g.scale.setScalar(0.8);   // ~2.5 m: büyütülmüş kale (3.4 m) ile oranlı
     g.userData = { sp, id: st.ids[s][i], kit, phase: Math.random() * 6 };
     this.scene.add(g);
     return g;

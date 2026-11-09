@@ -10,7 +10,9 @@ export const SPM = 3.3; // 1x hızda 1 maç dakikası kaç saniye
 export const PL = 105, PW = 68;
 const DT = 0.05;
 export const FRAME = 52;
-const CX = PW / 2, GOALW = 3.66;
+// kale, oyuncu dairelerine oranla küçük kalmasın diye gerçeğinden büyük çizilir (11.7 m × 3.4 m)
+export const GOAL = 11.7, GOALH = 3.4;
+const CX = PW / 2, GOALW = GOAL / 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const hyp = Math.hypot;
 const num = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== undefined ? Number(v) : d);
@@ -171,7 +173,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
       if (p.out) continue;
       if (p.k === 0) { // kaleci: top uzaksa öne çıkar, yaklaştıkça çizgisine döner
         const g = clamp(2.5 + (bg - 22) * 0.13, 2.2, att ? 18 : 13), near = bg < 30;
-        go(p, CX + clamp((bx - CX) * (near ? 0.22 : 0.08), -3.2, 3.2), g, 4.2); continue;
+        go(p, CX + clamp((bx - CX) * (near ? 0.22 : 0.08), -4.4, 4.4), g, 4.2); continue;
       }
       let g, x;
       if (att) {
@@ -538,11 +540,11 @@ export function simulateMatch(fx, events, R, ins = {}) {
   function shoot(head) {
     const e = plan.e, tm = plan.tm, gk = GK[1 - tm], gy = Y(tm, PL), ev = e.ev;
     const sg = R() < 0.5 ? -1 : 1; let gx, gz, post = false;
-    if (ev === 'goal') { gx = CX + sg * rnd(1.1, 3.25); gz = rnd(0.2, 2.0); }
-    else if (ev === 'save') { gx = CX + sg * rnd(0.5, 2.9); gz = rnd(0.3, 1.7); }
+    if (ev === 'goal') { gx = CX + sg * rnd(1.6, GOALW - 0.6); gz = rnd(0.2, 2.7); }
+    else if (ev === 'save') { gx = CX + sg * rnd(0.6, 4.2); gz = rnd(0.3, 2.3); }
     else if (R() < 0.12) { post = true; gx = CX + sg * (GOALW + 0.05); gz = rnd(0.3, 1.6); }
-    else if (R() < 0.42) { gx = CX + sg * rnd(0, 3); gz = rnd(3.1, 5.5); }
-    else { gx = CX + sg * rnd(4.6, 8.5); gz = rnd(0.2, 2); }
+    else if (R() < 0.42) { gx = CX + sg * rnd(0, 4.6); gz = rnd(4.3, 6.6); }
+    else { gx = CX + sg * rnd(GOALW + 1.4, GOALW + 5.5); gz = rnd(0.2, 2); }
     ball.own = null; ball.z = 0;
     const d = hyp(gx - ball.x, gy - ball.y), fl = clamp(d / (head ? 16 : e.style === 'pen' ? 22 : 26), 0.24, 1.15);
     e.t = t / SPM; e.ta = (t + fl) / SPM; e.head = !!head;
@@ -550,7 +552,7 @@ export function simulateMatch(fx, events, R, ins = {}) {
     let ddir = dir; const amp = ev === 'save' ? 1 : ev === 'goal' ? rnd(0.55, 0.8) : gz > 3 ? 0.25 : 0.5;
     if (e.style === 'pen' && ev === 'goal' && R() < 0.55) ddir = -dir; // ters köşe
     if (!gk.out) Object.assign(dv, { dir: ddir, t0: t + fl * 0.3, t1: t + fl, until: t + fl + (ev === 'save' ? 0.7 : 1.1), amp });
-    plan.gkx = ev === 'save' ? gx : gk.x + ddir * amp * 1.8; plan.st = 'shot';
+    plan.gkx = ev === 'save' ? gx : gk.x + ddir * amp * 2.6; plan.st = 'shot';
     kick(gx, gy, { dur: fl, pk: e.style === 'fk' ? 1.7 : head ? 0.3 : d > 22 ? 1.1 : 0.25, z0: head ? 2.1 : 0.15, z1: gz, kind: 'shot', tm, then: () => resolve(e, tm, gx, gy, gz, post, sg) });
   }
   function resolve(e, tm, gx, gy, gz, post, sg) {
