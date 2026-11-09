@@ -335,7 +335,7 @@ class Pitch3D {
     const sp = new THREE.Sprite(this.badge(kit, st.num(st.ids[s][i])));
     sp.scale.set(2.4, 2.4, 1); sp.position.y = 4.6; sp.renderOrder = 10; g.add(sp);
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), this.shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; g.add(sh);
-    g.scale.setScalar(0.8);   // ~2.5 m: büyütülmüş kale (3.4 m) ile oranlı
+    g.scale.setScalar(0.8);   // ~2.5 m: büyütülmüş kale (3.8 m) ile oranlı
     g.userData = { sp, id: st.ids[s][i], kit, phase: Math.random() * 6 };
     this.scene.add(g);
     return g;
