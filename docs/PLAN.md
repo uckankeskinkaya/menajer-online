@@ -105,3 +105,5 @@ Ek olarak: arayüz baştan yeniden tasarlandı; 2D'de oyuncular içinde forma nu
 | 4t | Yönetim güveni gerçek: uyarı, kovulma, iş teklifleri (kovulunca küçük, başarılı sezonda büyük kulüplerden) | ✅ |
 | 4u | Gerçekçi taktikler: atak türleri taktiğe, başarı oyuncu eşleşmesine bağlı; YZ rakibe göre taktik seçer ve maç içinde skora göre değiştirir; görüntü atak türünü oynar | ✅ |
 | 4v | Maç içi müdahale: kariyer maçında istediğin an değişiklik/oyun anlayışı/talimat (5 dk içinde oyuna girer) | ✅ |
+| 4w | Maç görüntü motoru v2 (sim.js, sıfırdan; FM'den esinlenen ajan tabanlı): 22 bağımsız oyuncu, top fiziği, topa/talimata göre kayan takım şekli, pas kararı (hat, boşluk, ilerleme, ofsayt), pres, top kapma, faul, taç/aut/korner; sunucunun şut ve kart olayları oyunun akışı içinde kurulur. Maç istatistiklerinde pas / pas isabeti / top kapma; topa sahip olma sunucu değerine bağlı | ✅ |
+| 4x | Arayüz rötuşu: emojiler çizim simgelerine çevrildi (haberler, basın, moral, kart/sakatlık), kondisyon çubuğu yeşil/sarı/kırmızı, Özet'te basın toplantısı kulüp kartının altında | ✅ |

@@ -20,6 +20,18 @@ const ICON = {
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   cup: '<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>',
+  clip: '<rect x="5" y="4" width="14" height="17" rx="1.5"/><path d="M9 4V2.5h6V4M9 10h6M9 14h6M9 18h3"/>',
+  hammer: '<path d="M14 4l6 6-3 3-6-6zM12.5 8.5L3 18l3 3 9.5-9.5"/>',
+  warn: '<path d="M12 3l10 18H2zM12 10v5M12 18v.5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 7l9 6 9-6"/>',
+  swords: '<path d="M4 4l11 11M4 4v4M4 4h4M20 4L9 15M20 4v4M20 4h-4M13 17l3 3M11 17l-3 3M6 14l4 4M18 14l-4 4"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="1.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  flag: '<path d="M5 21V4M5 4h13l-3 4.5 3 4.5H5"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+  news: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9h6M7 13h10M7 17h10M16 8v2"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  bot: '<rect x="4" y="8" width="16" height="11" rx="2"/><path d="M12 8V4M9 13v2M15 13v2M2 13v3M22 13v3"/><circle cx="12" cy="3.5" r="1"/>',
   ball: '<circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 4.5h-5L8 10zM12 7V3M16 10l4-1.5M14.5 14.5l2.5 3.5M9.5 14.5L7 18M8 10L4 8.5"/>',
 };
 const icon = (k, sz = 22) => `<svg class="ico" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -62,8 +74,8 @@ function pv(id) {
   return { ...p, base: p.ovr, ovr: p.ovr + (sq?.ovr_delta || 0), age: p.age + (S.game?.season || 1) - 1, sq, st: S.pstats.get(id) };
 }
 const unavailable = (sq) => sq && (sq.injury > 0 || sq.ban > 0);
-const MORALE = (m) => (m >= 85 ? ['😃', 'Çok iyi'] : m >= 70 ? ['🙂', 'İyi'] : m >= 55 ? ['😐', 'Normal'] : m >= 40 ? ['😕', 'Kötü'] : ['😠', 'Çok kötü']);
-const moraleIcon = (sq) => (sq && sq.morale !== undefined ? `<span class="mo" title="Moral: ${MORALE(sq.morale)[1]} (${sq.morale})">${MORALE(sq.morale)[0]}</span>` : '');
+const MORALE = (m) => (m >= 85 ? ['m5', 'Çok iyi', '▲'] : m >= 70 ? ['m4', 'İyi', '▲'] : m >= 55 ? ['m3', 'Normal', '●'] : m >= 40 ? ['m2', 'Kötü', '▼'] : ['m1', 'Çok kötü', '▼']);
+const moraleIcon = (sq) => (sq && sq.morale !== undefined ? `<span class="mo ${MORALE(sq.morale)[0]}" title="Moral: ${MORALE(sq.morale)[1]} (${sq.morale})">${MORALE(sq.morale)[2]}</span>` : '');
 const contractTxt = (c) => (c <= 0 ? 'bu sezon bitiyor' : `${c} yıl daha`);
 // sözleşme uzatma maliyeti (sunucudaki renew_contract ile aynı hesap)
 function renewCost(sq, years) {
@@ -72,10 +84,10 @@ function renewCost(sq, years) {
 }
 function statusBadges(sq) {
   if (!sq) return '';
-  return `${sq.injury > 0 ? `<span class="tag bad" title="Sakat">🚑 ${sq.injury}h</span>` : ''}${sq.ban > 0 ? `<span class="tag bad" title="Cezalı">🟥 ${sq.ban}m</span>` : ''}${sq.yellows >= 4 ? '<span class="tag warn" title="Bir sarı daha cezalı">🟨4</span>' : ''}${sq.loan_from ? `<span class="tag cup" title="${esc(sq.loan_from)} kulübünden sezon sonuna kadar kiralık">🤝 Kiralık</span>` : sq.contract !== undefined && sq.contract <= 0 ? '<span class="tag warn" title="Sözleşmesi bu sezon bitiyor">📝</span>' : ''}`;
+  return `${sq.injury > 0 ? `<span class="tag bad" title="Sakat"><i class="inj">+</i> ${sq.injury}h</span>` : ''}${sq.ban > 0 ? `<span class="tag bad" title="Cezalı"><i class="cd r"></i> ${sq.ban}m</span>` : ''}${sq.yellows >= 4 ? '<span class="tag warn" title="Bir sarı daha cezalı"><i class="cd y"></i>4</span>' : ''}${sq.loan_from ? `<span class="tag cup" title="${esc(sq.loan_from)} kulübünden sezon sonuna kadar kiralık">Kiralık</span>` : sq.contract !== undefined && sq.contract <= 0 ? '<span class="tag warn" title="Sözleşmesi bu sezon bitiyor">SÖZ</span>' : ''}`;
 }
 const fitBar = (f) => `<span class="fit" title="Kondisyon %${f}"><i style="width:${f}%" class="${f >= 80 ? 'hi' : f >= 60 ? 'mid' : 'lo'}"></i></span>`;
-const bidderName = (o) => (o.bidder ? tname(o.bidder) : `🤖 ${o.ai_club || 'Yapay zeka kulübü'}`);
+const bidderName = (o) => (o.bidder ? tname(o.bidder) : `${o.ai_club || 'Yapay zeka kulübü'} (YZ)`);
 
 async function rpc(fn, args) {
   const { data, error } = await sb.rpc(fn, args);
@@ -272,11 +284,11 @@ async function quickMatchModal() {
   try { list = await clubs(); } catch (e) { return toast(errText(e), 'err'); }
   const top = (lg) => list.filter((c) => c.lg === lg);
   const st = { h: { lg: 'TUR', cl: top('TUR')[0]?.club }, a: { lg: 'TUR', cl: top('TUR')[1]?.club } };
-  modal(`<h2>⚡ Hızlı maç</h2><p class="muted small">Gerçek kadrolarla bir hazırlık maçı. Sonuç hiçbir oyuna işlenmez.</p>
+  modal(`<h2>${icon('bolt', 18)} Hızlı maç</h2><p class="muted small">Gerçek kadrolarla bir hazırlık maçı. Sonuç hiçbir oyuna işlenmez.</p>
     <label>Ev sahibi</label><div id="qH"></div>
     <div class="vs">VS</div>
     <label>Deplasman</label><div id="qA"></div>
-    <button class="btn ghost sm" id="qRnd">🎲 Rastgele derbi</button>
+    <button class="btn ghost sm" id="qRnd">Rastgele derbi</button>
     <button class="btn primary big" id="qGo">Maçı başlat</button><button class="btn ghost" data-close>Vazgeç</button>`, {
     onMount: (box, close) => {
       const draw = (k) => {
@@ -307,7 +319,7 @@ async function careerModal() {
   let list = [];
   try { list = await clubs(); } catch { list = []; }
   let lg = 'TUR', type = list.length ? 'real' : 'fake', sel = null;
-  modal(`<h2>🏆 Yeni kariyer</h2>
+  modal(`<h2>Yeni kariyer</h2>
     <div class="seg wide" id="cType"><button data-t="real" class="${type === 'real' ? 'on' : ''}">Gerçek kulüp</button><button data-t="fake" class="${type === 'fake' ? 'on' : ''}">Kendi takımım</button></div>
     <div id="cBody"></div>`, {
     onMount: (box, close) => {
@@ -498,7 +510,7 @@ setInterval(() => {
     const sig = all.map((f) => `${f.id}:${liveState(f)}`).join(',');
     if (S.liveSig && sig !== S.liveSig) {
       const mineLive = all.find((f) => liveState(f) === 'live' && (f.home === me()?.id || f.away === me()?.id) && !S.liveSig.includes(`${f.id}:live`));
-      if (mineLive) toast(`⚽ Maçın başladı! Özet'ten canlı izle`, 'ok');
+      if (mineLive) toast(`Maçın başladı! Özet'ten canlı izle`, 'ok');
       if (!$('#match').classList.contains('show') && ['ozet', 'lig'].includes(S.tab)) refresh();
     }
     S.liveSig = sig;
@@ -581,10 +593,10 @@ function renderLobby() {
   </section>
   <section class="card">
     <h2>Takımlar (${S.teams.length}/${s.max_teams})</h2>
-    <div class="list">${S.teams.map((t) => `<div class="lrow">${teamDot(t)}<div class="grow"><b>${esc(t.name)}</b> <small>${esc(t.short)}</small><small>${esc(S.usernames.get(t.owner) || '')}${t.owner === S.game.owner ? ' 👑' : ''}</small></div>
+    <div class="list">${S.teams.map((t) => `<div class="lrow">${teamDot(t)}<div class="grow"><b>${esc(t.name)}</b> <small>${esc(t.short)}</small><small>${esc(S.usernames.get(t.owner) || '')}${t.owner === S.game.owner ? ' · oda sahibi' : ''}</small></div>
       ${t.owner === S.user.id ? `<button class="btn sm" id="btnKit">Forma</button>` : ''}
       ${own && t.owner !== S.user.id ? `<button class="btn sm ghost danger" data-kick="${t.id}">Çıkar</button>` : ''}</div>`).join('')}</div>
-    ${Number(s.bots || 0) > 0 ? `<p class="muted small">+ ${Math.min(Number(s.bots), s.max_teams - S.teams.length)} yapay zeka takımı başlarken eklenecek 🤖</p>` : ''}
+    ${Number(s.bots || 0) > 0 ? `<p class="muted small">+ ${Math.min(Number(s.bots), s.max_teams - S.teams.length)} yapay zeka takımı başlarken eklenecek</p>` : ''}
   </section>
   <section class="card">
     <h2>Ayarlar ${own ? '' : '<small class="muted">(sadece oda sahibi değiştirebilir)</small>'}</h2>
@@ -764,13 +776,13 @@ function assistantReport(f) {
     `İlk 11 gücü: biz <b>${ours}</b> · onlar <b>${theirs}</b>`,
     key ? `En tehlikeli oyuncuları <b>${esc(key.name)}</b> (${key.ovr}, ${esc(key.positions.split(',')[0])}).` : '',
     inj || ban ? `Kadromuzda ${inj ? `${inj} sakat` : ''}${inj && ban ? ', ' : ''}${ban ? `${ban} cezalı` : ''} oyuncu var.` : 'Sakat ya da cezalı oyuncumuz yok.',
-    badIn11 ? `<span class="warn">⚠️ İlk 11'de oynayamayacak ${badIn11} oyuncu var, taktiği güncelle.</span>` : '',
+    badIn11 ? `<span class="warn">İlk 11'de oynayamayacak ${badIn11} oyuncu var, taktiği güncelle.</span>` : '',
     tired ? `İlk 11'de ${tired} oyuncunun kondisyonu %70'in altında; rotasyon düşün.` : '',
     (() => { const ex = mine.filter((x) => x.contract !== undefined && x.contract <= 0).length, sad = mine.filter((x) => x.morale !== undefined && x.morale < 45).length;
-      return [ex ? `${ex} oyuncunun sözleşmesi bu sezon bitiyor; uzatmazsan sezon sonunda bedelsiz gider.` : '', sad ? `${sad} oyuncunun morali bozuk 😕 (forma şansı ve sonuçlar etkiliyor).` : ''].filter(Boolean).join(' '); })(),
+      return [ex ? `${ex} oyuncunun sözleşmesi bu sezon bitiyor; uzatmazsan sezon sonunda bedelsiz gider.` : '', sad ? `${sad} oyuncunun morali bozuk (forma şansı ve sonuçlar etkiliyor).` : ''].filter(Boolean).join(' '); })(),
     `<i>${advice}</i>`,
   ].filter(Boolean);
-  return `<div class="assist"><div class="as-head"><span class="as-av">🧑‍💼</span><div><b>Yardımcı antrenör</b><small>Maç önü raporu</small></div></div><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></div>`;
+  return `<div class="assist"><div class="as-head"><span class="as-av">${icon('clip', 20)}</span><div><b>Yardımcı antrenör</b><small>Maç önü raporu</small></div></div><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></div>`;
 }
 
 // ---------------- forma ve arma editörü ----------------
@@ -818,17 +830,19 @@ function fxRow(f, { showRound } = {}) {
     : f.played ? `<b class="score">${f.hg} - ${f.ag}</b>`
     : `<span class="score muted">${f.kickoff_at ? kickTime(f.kickoff_at) : '-'}</span>`;
   const tag = f.comp === 'cup' ? `<span class="tag cup">Kupa ${f.cup_round}.tur${f.leg === 2 ? ' rövanş' : ''}</span>`
-    : f.comp === 'euro' ? `<span class="tag euro">🌍 ${esc(compLabel(f).replace('Avrupa · ', ''))}</span>`
+    : f.comp === 'euro' ? `<span class="tag euro">${esc(compLabel(f).replace('Avrupa · ', ''))}</span>`
     : f.comp === 'friendly' ? '<span class="tag">Hazırlık</span>' : '';
   return `<${link ? `a href="#/oda/${S.gameId}/mac/${f.id}"` : 'div'} class="fx ${mine ? 'mine' : ''} ${st === 'live' ? 'is-live' : ''}">
     ${showRound && f.comp !== 'friendly' ? `<small class="rnd">${f.round}.h${f.kickoff_at && !f.played ? ' ' + new Date(f.kickoff_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : ''}</small>` : ''}
     <span class="tm r">${esc(h?.name)} ${teamDot(h)}</span>${score}<span class="tm">${teamDot(a)} ${esc(a?.name)}</span>
-    ${tag}${f.pens && st !== 'live' ? `<small class="pens">pen. ${esc(f.pens)}</small>` : ''}${link ? `<span class="watch">${st === 'live' ? '🔴' : '▶'}</span>` : ''}
+    ${tag}${f.pens && st !== 'live' ? `<small class="pens">pen. ${esc(f.pens)}</small>` : ''}${link ? `<span class="watch">${st === 'live' ? '<i class="livedot"></i>' : '▶'}</span>` : ''}
   </${link ? 'a' : 'div'}>`;
 }
 function newsItem(n) {
-  const ic = { transfer: '🔁', auction: '🔨', outbid: '⚠️', offer: '💌', rival: '⚔️', champion: '🏆', round: '📅', cup: '🏆', start: '🚀', join: '👋', info: 'ℹ️' }[n.kind] || '📰';
-  return `<div class="news ${n.team_id ? 'priv' : ''}"><span>${ic}</span><div>${esc(n.text)}<small>${ago(n.created_at)}</small></div></div>`;
+  const ic = { transfer: 'teklif', auction: 'hammer', outbid: 'warn', offer: 'mail', rival: 'swords', champion: 'cup', round: 'cal', cup: 'cup', start: 'flag', join: 'users', info: 'info' }[n.kind] || 'news';
+  // sunucudan gelen eski metinlerdeki emojiler ayıklanır
+  const txt = String(n.text || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').trim();
+  return `<div class="news k-${esc(n.kind || 'x')} ${n.team_id ? 'priv' : ''}"><span class="nic">${icon(ic, 16)}</span><div>${esc(txt)}<small>${ago(n.created_at)}</small></div></div>`;
 }
 // maç sonu basın toplantısı: son resmi maç için bir kez (sunucudaki answer_press ile aynı sorular/cevaplar)
 const PRESS = {
@@ -843,7 +857,7 @@ function pressCard(t, mine) {
   if (!done || t.press_fx === done.id) return '';
   const gf = done.home === t.id ? done.hg : done.ag, ga = done.home === t.id ? done.ag : done.hg;
   const [q, opts] = PRESS[gf > ga ? 'w' : gf === ga ? 'd' : 'l'];
-  return `<section class="card press"><h2>🎙️ Basın toplantısı</h2>
+  return `<section class="card press"><h2>${icon('mic', 18)} Basın toplantısı</h2>
     <p class="small muted">${esc(tname(done.home))} ${done.hg} - ${done.ag} ${esc(tname(done.away))}</p>
     <p><b>${q}</b></p>
     <div class="col">${opts.map((o, i) => `<button class="btn" data-press="${i}">“${esc(o)}”</button>`).join('')}</div>
@@ -868,13 +882,12 @@ function renderOzet() {
   const opps = S.teams.filter((x) => x.id !== t?.id);
   const myFriendly = S.friendlies.filter((f) => f.home === t?.id || f.away === t?.id).slice(0, 3);
   view().innerHTML = `
-  ${S.game.status === 'finished' ? `<section class="card champ">🏆 ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''} ${S.game.euro?.champion ? `· Avrupa: <b>${esc(tname(S.game.euro.champion))}</b>` : ''}
+  ${S.game.status === 'finished' ? `<section class="card champ">${icon('cup', 20)} ${S.game.season || 1}. sezon bitti! ${S.standings[0] && hasLeague() ? `Lig şampiyonu: <b>${esc(S.standings[0].name)}</b>` : ''} ${S.game.cup?.champion ? `· Kupa: <b>${esc(tname(S.game.cup.champion))}</b>` : ''} ${S.game.euro?.champion ? `· Avrupa: <b>${esc(tname(S.game.euro.champion))}</b>` : ''}
     ${isOwner() ? `<button class="btn primary big" id="btnSeason" style="margin-top:10px">▶ ${(S.game.season || 1) + 1}. sezonu başlat</button><p class="small">Oyuncular bir yaş büyür; gençler gelişir, yaşlılar düşer, bazıları emekli olur. Kadrolar ve bütçeler kalır.</p>` : '<p class="small">Yeni sezonu oda sahibi başlatır.</p>'}</section>` : ''}
   ${S.game.status === 'finished' && isCareer() && S.game.settings.job_offers && Number(S.game.settings.job_offers.season) === Number(S.game.season || 1) ? jobCards(S.game.settings.job_offers.teams || [], 'İş teklifleri', 'Başarın dikkat çekti. Yeni sezona başlamadan bu kulüplerden birine geçebilirsin; geçmezsen teklifler düşer.') : ''}
   ${(() => { const p = mine.find((f) => !f.played && f.ht != null); return p && Number(p.htn) > 90 ? `<section class="card press"><h2>⏯ Maçın sürüyor</h2><p>${esc(tname(p.home))} – ${esc(tname(p.away))}</p><p class="small muted">Maçı izlemeyi bitirmedin. İzlerken istediğin anda müdahale edebilirsin; "Devam et" dersen maç olduğu gibi sonuçlanır.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Maça dön</button></section>`
       : p ? `<section class="card press"><h2>⏸ Devre arası</h2><p>${esc(tname(p.home))} <b>${p.hg ?? 0} - ${p.ag ?? 0}</b> ${esc(tname(p.away))}</p><p class="small muted">İkinci yarı senin kararını bekliyor: takım konuşması, değişiklik, taktik.</p><button class="btn primary" id="btnHT" data-f="${p.id}">Soyunma odasına git</button></section>` : ''; })()}
-  ${pressCard(t, mine)}
-  ${live.length ? `<section class="card live-card"><h2>🔴 Şu an canlı</h2>${live.map((f) => fxRow(f)).join('')}</section>` : ''}
+  ${live.length ? `<section class="card live-card"><h2><i class="livedot"></i> Şu an canlı</h2>${live.map((f) => fxRow(f)).join('')}</section>` : ''}
   <section class="card hero">
     <div class="hero-kit">${shirtSVG(t, { num: '', size: 64 })}${crestSVG(t, 54)}</div>
     <div class="grow"><h2>${esc(t?.name)}</h2><small>${(S.game.season || 1)}. sezon · ${S.game.status === 'active' ? `${S.game.current_round}. hafta` : S.game.status === 'finished' ? 'sezon bitti' : ''}</small></div>
@@ -886,6 +899,7 @@ function renderOzet() {
     <div><small>İlk 11 gücü</small><b>${lineupOvr || '-'}</b></div>
     <div><small>Sıra</small><b>${hasLeague() ? (S.standings.findIndex((x) => x.team_id === t?.id) + 1 || '-') + '.' : '-'}</b></div>
   </section>
+  ${pressCard(t, mine)}
   ${(() => {
     const f = active ? nextMyFixture() : null;
     if (!f) return '';
@@ -920,13 +934,13 @@ function renderOzet() {
       <p class="muted small center">Herkes hazır olunca hafta kendiliğinden oynanır.</p>` : ''}
     ${isOwner() && !isCareer() ? `<button class="btn ${isAuto() ? 'ghost' : ''}" id="btnNext">▶ ${nextR}. haftayı ${isAuto() ? 'şimdi ' : ''}oynat (${roundFx.length} maç)</button>` : ''}
   </section>` : ''}
-  ${!windowOpen() && active ? `<p class="muted small center">🔒 Transfer dönemi kapalı. Sezon başında ve devre arasında açılır.</p>` : ''}
+  ${!windowOpen() && active ? `<p class="muted small center">Transfer dönemi kapalı. Sezon başında ve devre arasında açılır.</p>` : ''}
   ${lastPlayed.length ? `<section class="card"><h2>${S.game.current_round}. hafta sonuçları</h2>${lastPlayed.map((f) => fxRow(f)).join('')}</section>` : ''}
   ${next.length ? `<section class="card"><h2>Sıradaki maçların</h2>${next.map((f) => fxRow(f, { showRound: true })).join('')}</section>` : ''}
   ${last.length ? `<section class="card"><h2>Son maçların</h2>${last.map((f) => fxRow(f, { showRound: true })).join('')}</section>` : ''}
   ${active ? `<section class="card"><h2>Hazırlık maçı</h2>
     <p class="muted small">Hemen başlar, canlı izlersin. Puana ve bütçeye etkisi yok — taktik denemek için.</p>
-    <div class="row"><select id="frOpp" class="grow">${opps.map((x) => `<option value="${x.id}">${esc(x.name)}${x.is_bot ? ' 🤖' : ''}</option>`).join('')}</select>
+    <div class="row"><select id="frOpp" class="grow">${opps.map((x) => `<option value="${x.id}">${esc(x.name)}${x.is_bot ? ' (YZ)' : ''}</option>`).join('')}</select>
     <button class="btn primary" id="btnFriendly">Oyna</button></div>
     ${myFriendly.length ? `<div class="list">${myFriendly.map((f) => fxRow(f)).join('')}</div>` : ''}
   </section>` : ''}
@@ -1164,10 +1178,10 @@ function renderTaktik() {
         const off = p && p.grp !== g;
         const un = p && unavailable(p.sq);
         return `<button class="slot ${off ? 'off' : ''} ${p ? '' : 'empty'} ${un ? 'unav' : ''}" data-i="${i}" style="left:${pos[i].x * 100}%;top:${pos[i].y * 100}%">
-          ${p ? `${dotHTML(i === 0 ? { c1: '#facc15', c2: '#1f2937', pattern: 'plain' } : kitOf(t), p.sq?.shirt ?? i + 1, 36)}<span class="nm">${esc(p.name)}</span><span class="ochip ${off || un ? 'warn' : ''}">${un ? (p.sq.injury > 0 ? '🚑' : '🟥') : p.ovr}</span>${fitBar(p.sq?.fitness ?? 100)}` : `<span class="nm">${g}</span>`}</button>`;
+          ${p ? `${dotHTML(i === 0 ? { c1: '#facc15', c2: '#1f2937', pattern: 'plain' } : kitOf(t), p.sq?.shirt ?? i + 1, 36)}<span class="nm">${esc(p.name)}</span><span class="ochip ${off || un ? 'warn' : ''}">${un ? (p.sq.injury > 0 ? '<i class="inj">+</i>' : '<i class="cd r"></i>') : p.ovr}</span>${fitBar(p.sq?.fitness ?? 100)}` : `<span class="nm">${g}</span>`}</button>`;
       }).join('')}
     </div>
-    ${bad.length ? `<p class="warn small">⚠️ İlk 11'de oynayamayacak oyuncu var (${bad.map((id) => esc(pv(id).name)).join(', ')}). Değiştirmezsen maçta yerine kenardan en iyisi oynar.</p>` : ''}
+    ${bad.length ? `<p class="warn small">İlk 11'de oynayamayacak oyuncu var (${bad.map((id) => esc(pv(id).name)).join(', ')}). Değiştirmezsen maçta yerine kenardan en iyisi oynar.</p>` : ''}
     <p class="muted small">Oyuncuya dokunup değiştir. Kırmızı: mevkisi dışında (%15 güç kaybı, kalecide %50). Çubuk: kondisyon — yorgun oyuncu daha zayıf oynar; haftalık dinlenme antrenman yoğunluğuna bağlı.</p>
     <div class="row">
       <button class="btn" id="tAuto">En iyi 11</button>
@@ -1266,7 +1280,7 @@ function scoutReport(p) {
   else if (p.ovr >= p.pot) notes.push('Gelişimi tamamlanmış.');
   if (p.age >= 32) { stars = Math.max(1, stars - 1); notes.push(`${p.age} yaşında: gelecek sezon düşüş ve emeklilik riski, değeri hızla erir.`); }
   if (same.length >= 4 && stars <= 3) notes.push(`Bu mevkide zaten ${same.length} oyuncun var.`);
-  return `<div class="scout"><div class="row between"><b>🔎 Gözlemci raporu</b>${starsHTML(stars, 'mini')}</div><ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+  return `<div class="scout"><div class="row between"><b>Gözlemci raporu</b>${starsHTML(stars, 'mini')}</div><ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
 }
 async function playerModal(pid) {
   await fetchPlayers([pid]);
@@ -1287,22 +1301,22 @@ async function playerModal(pid) {
     <p class="muted small center">${esc(p.full_name || '')}</p>
     <div class="pinfo">
       <span>${grpBadge(p.grp)} ${esc(p.positions)}</span><span>${p.age} yaş · pot. ${p.pot}${p.ovr !== p.base ? ` · FC26: ${p.base}` : ''}</span><span>${esc(p.nat)}</span>
-      <span>${owner ? `${teamDot(owner)} ${esc(owner.name)}` : `🤖 ${esc(p.club)} (${LEAGUES[p.lg] || p.lg})`}</span>
+      <span>${owner ? `${teamDot(owner)} ${esc(owner.name)}` : `${esc(p.club)} (${LEAGUES[p.lg] || p.lg})`}</span>
       <span>Değer: <b>${money(value)}</b>${owned?.bought_for > 0 ? ` · alış ${money(owned.bought_for)}` : ''}</span>
       <span>Maaş: <b>${money(owned?.wage || wageOf(value))}</b>/hafta${owned ? '' : ' (talep)'}</span>
     </div>
     ${mine ? '' : scoutReport(p)}
     ${owned ? `<div class="pinfo">${statusBadges(owned)}<span>Kondisyon ${fitBar(owned.fitness)} %${owned.fitness}</span><span>Form <b>${Number(owned.form).toFixed(1)}</b></span>${owned.yellows ? `<span>🟨 ${owned.yellows}</span>` : ''}
       ${owned.morale !== undefined ? `<span>Moral ${MORALE(owned.morale)[0]} <b>${MORALE(owned.morale)[1]}</b></span>` : ''}${owned.contract !== undefined ? `<span>Sözleşme: <b>${contractTxt(owned.contract)}</b></span>` : ''}</div>` : ''}
-    ${mine && owned.loan_from ? `<p class="small center">🤝 <b>${esc(owned.loan_from)}</b> kulübünden sezon sonuna kadar kiralık. Satılamaz; sezon bitince kulübüne döner.</p>` : ''}
+    ${mine && owned.loan_from ? `<p class="small center"><b>${esc(owned.loan_from)}</b> kulübünden sezon sonuna kadar kiralık. Satılamaz; sezon bitince kulübüne döner.</p>` : ''}
     ${mine && !owned.loan_from && owned.contract !== undefined && S.game.status !== 'lobby' ? `<div class="renew">
       <label>Sözleşme uzat <select id="rnY">${[1, 2, 3, 4].map((y) => `<option value="${y}">${y} yıl</option>`).join('')}</select></label>
       <small class="muted" id="rnCost"></small>
       <button class="btn sm primary" id="rnGo" type="button">Uzat</button></div>` : ''}
     ${st ? `<div class="pstat"><div><b>${st.apps}</b><small>Maç</small></div><div><b>${st.goals}</b><small>Gol</small></div><div><b>${st.assists}</b><small>Asist</small></div><div><b>${st.rating}</b><small>Ort. puan</small></div><div><b>${st.motm}</b><small>Maçın adamı</small></div></div>` : ''}
-    ${auction ? `<div class="auction ${auction.bidder === me()?.id ? 'lead' : ''}">🔨 Açık artırma: <b>${money(auction.amount)}</b> · ${esc(tname(auction.bidder))} · <span data-exp="${auction.expires_at}">${timeLeft(auction.expires_at)}</span></div>` : ''}
+    ${auction ? `<div class="auction ${auction.bidder === me()?.id ? 'lead' : ''}">${icon('hammer', 15)} Açık artırma: <b>${money(auction.amount)}</b> · ${esc(tname(auction.bidder))} · <span data-exp="${auction.expires_at}">${timeLeft(auction.expires_at)}</span></div>` : ''}
     ${mine ? `
-      ${offers.filter((o) => o.seller === me().id).map((o) => `<div class="offer-in">💌 ${esc(bidderName(o))}: <b>${money(o.amount)}</b>
+      ${offers.filter((o) => o.seller === me().id).map((o) => `<div class="offer-in">${icon('mail', 15)} ${esc(bidderName(o))}: <b>${money(o.amount)}</b>
         <button class="btn sm primary" data-acc="${o.id}">Kabul</button><button class="btn sm ghost" data-rej="${o.id}">Ret</button></div>`).join('')}
       ${active && !owned.loan_from ? `<button class="btn danger ghost" id="pSell">Yapay zekaya sat: ${money(Math.floor(value * (S.game.settings.ai_sell_ratio || 0.75)))}</button>` : ''}`
     : active ? `
@@ -1322,10 +1336,10 @@ async function playerModal(pid) {
       ${'loan_from' in (S.own.values().next().value || {}) && (!owner || (owner.is_bot && !owned?.loan_from)) && !auction && !myOffer ? (() => {
         const fee = Math.max(100000, Math.round((value * 0.1) / 100000) * 100000);
         const starter = owner && (owner.lineup || []).includes(pid);
-        return `<div class="loanbox"><b>🤝 Kiralık al</b><p class="small muted">Sezon sonuna kadar. Bedel ${money(fee)} (değerin %10'u), maaşı ~${money(wageOf(value))}/hafta sen ödersin; sezon bitince kulübüne döner. En fazla 4 kiralık.</p>
+        return `<div class="loanbox"><b>Kiralık al</b><p class="small muted">Sezon sonuna kadar. Bedel ${money(fee)} (değerin %10'u), maaşı ~${money(wageOf(value))}/hafta sen ödersin; sezon bitince kulübüne döner. En fazla 4 kiralık.</p>
           ${starter ? `<p class="small warn">${esc(owner.name)} ilk 11 oyuncusunu kiralık vermez.</p>` : `<button class="btn" type="button" id="pLoan">Kirala: ${money(fee)}</button>`}</div>`;
       })() : ''}` : ''}
-    ${S.game.status === 'active' && !windowOpen() ? '<p class="muted small center">🔒 Transfer dönemi kapalı</p>' : ''}
+    ${S.game.status === 'active' && !windowOpen() ? '<p class="muted small center">Transfer dönemi kapalı</p>' : ''}
     <button class="btn ghost" data-close>Kapat</button>`, {
     onMount: (box, close) => {
       const rnY = box.querySelector('#rnY');
@@ -1391,7 +1405,7 @@ function renderPazar() {
       <button class="btn primary" type="submit">Ara</button>
     </form>
   </section>
-  ${!windowOpen() ? '<p class="muted small center">🔒 Transfer dönemi kapalı — oyunculara bakabilirsin ama teklif veremezsin.</p>' : ''}
+  ${!windowOpen() ? '<p class="muted small center">Transfer dönemi kapalı — oyunculara bakabilirsin ama teklif veremezsin.</p>' : ''}
   </div><section class="card mk-main"><div id="mkList"></div></section></div>`;
   const form = $('#mkForm');
   form.onsubmit = (e) => { e.preventDefault(); readMk(form); searchMarket(true); };
@@ -1438,7 +1452,7 @@ function renderMarketList() {
     const o = S.own.get(id);
     const auc = !o && activeOffersFor(id).filter((x) => !x.seller).sort((a, b) => b.amount - a.amount)[0];
     const t = o && S.teamById.get(o.team_id);
-    const side = `${auc ? `<span class="tag auc">🔨 <span data-exp="${auc.expires_at}">${timeLeft(auc.expires_at)}</span></span>` : ''}
+    const side = `${auc ? `<span class="tag auc">${icon('hammer', 12)} <span data-exp="${auc.expires_at}">${timeLeft(auc.expires_at)}</span></span>` : ''}
       ${t ? `<span class="tag own">${teamDot(t)}${esc(t.short)}</span>` : ''}<b>${money(auc ? auc.amount : o ? o.value : p.val)}</b>`;
     return playerRow(p, side);
   }).join('')}</div>${m.more ? '<button class="btn ghost" id="mkMore">Daha fazla</button>' : ''}` : '<p class="muted">Sonuç yok</p>';
@@ -1462,7 +1476,7 @@ function renderTeklif() {
       <b>${money(o.amount)}</b><div class="row"><button class="btn sm primary" data-acc="${o.id}">Kabul</button><button class="btn sm ghost" data-rej="${o.id}">Ret</button></div></div>`).join('') : '<p class="muted">Yok</p>'}
   </section>
   <section class="card"><h2>Açık artırmalar</h2>
-    ${auctions.length ? auctions.map((o) => `<div class="offer ${o.bidder === t.id ? 'lead' : ''}" data-pid="${o.player_id}"><div class="grow">${pl(o)}<small>${o.bidder === t.id ? '✅ En yüksek teklif sende' : esc(tname(o.bidder))}</small></div>
+    ${auctions.length ? auctions.map((o) => `<div class="offer ${o.bidder === t.id ? 'lead' : ''}" data-pid="${o.player_id}"><div class="grow">${pl(o)}<small>${o.bidder === t.id ? 'En yüksek teklif sende' : esc(tname(o.bidder))}</small></div>
       <b>${money(o.amount)}</b><span class="tag auc" data-exp="${o.expires_at}">${timeLeft(o.expires_at)}</span></div>`).join('') : '<p class="muted">Şu an açık artırma yok</p>'}
   </section>
   <section class="card"><h2>Menajerlere tekliflerim</h2>
@@ -1496,11 +1510,11 @@ function renderIstat() {
   const top = (arr, key, fmt, n = 10) => arr.filter((x) => x[key] > 0).sort((a, b) => b[key] - a[key] || b.rating - a.rating).slice(0, n);
   const block = (title, list, fmt) => `<section class="card"><h2>${title}</h2>${list.length ? `<div class="list">${list.map((x) => row(x, fmt(x))).join('')}</div>` : '<p class="muted">Henüz yok</p>'}</section>`;
   $('#lBody').innerHTML = `
-    ${block('⚽ Gol krallığı', top(all, 'goals'), (x) => `${x.goals} gol`)}
-    ${block('🅰️ Asist', top(all, 'assists'), (x) => `${x.assists} asist`)}
+    ${block('Gol krallığı', top(all, 'goals'), (x) => `${x.goals} gol`)}
+    ${block('Asist', top(all, 'assists'), (x) => `${x.assists} asist`)}
     ${block(`⭐ En yüksek puan <small class="muted">(en az ${minApps} maç)</small>`, all.filter((x) => x.apps >= minApps).sort((a, b) => b.rating - a.rating).slice(0, 10), (x) => x.rating)}
-    ${block('🏅 Maçın adamı', top(all, 'motm'), (x) => `${x.motm}×`)}
-    ${block('🟨 Kartlar', all.filter((x) => x.yellows + x.reds > 0).sort((a, b) => (b.reds * 3 + b.yellows) - (a.reds * 3 + a.yellows)).slice(0, 10), (x) => `${x.yellows}🟨${x.reds ? ` ${x.reds}🟥` : ''}`)}`;
+    ${block('Maçın adamı', top(all, 'motm'), (x) => `${x.motm}×`)}
+    ${block('Kartlar', all.filter((x) => x.yellows + x.reds > 0).sort((a, b) => (b.reds * 3 + b.yellows) - (a.reds * 3 + a.yellows)).slice(0, 10), (x) => `${x.yellows}🟨${x.reds ? ` ${x.reds}🟥` : ''}`)}`;
   $$('#lBody .prow').forEach((r) => (r.onclick = () => playerModal(Number(r.dataset.pid))));
 }
 function renderGecmis() {
@@ -1510,19 +1524,19 @@ function renderGecmis() {
     const e = trophies.get(x[k].name) || { league: 0, cup: 0, euro: 0 }; e[k]++; trophies.set(x[k].name, e);
   }
   $('#lBody').innerHTML = `
-  <section class="card"><h2>🏆 Kupa dolabı</h2>${trophies.size ? [...trophies].sort((a, b) => (b[1].euro * 2 + b[1].league + b[1].cup) - (a[1].euro * 2 + a[1].league + a[1].cup))
+  <section class="card"><h2>${icon('cup', 18)} Kupa dolabı</h2>${trophies.size ? [...trophies].sort((a, b) => (b[1].euro * 2 + b[1].league + b[1].cup) - (a[1].euro * 2 + a[1].league + a[1].cup))
     .map(([n, e]) => `<div class="lrow"><div class="grow"><b>${esc(n)}</b></div>${e.league ? `<span class="tag on">Lig ×${e.league}</span>` : ''}${e.cup ? `<span class="tag cup">Kupa ×${e.cup}</span>` : ''}${e.euro ? `<span class="tag euro">Avrupa ×${e.euro}</span>` : ''}</div>`).join('')
     : '<p class="muted">İlk sezon bitince burada görünecek.</p>'}</section>
   ${h.map((x) => `<section class="card"><h3>${x.season}. sezon</h3>
-    ${x.league ? `<div>🏆 Lig: <b>${esc(x.league.name)}</b></div>` : ''}${x.cup ? `<div>🏆 Kupa: <b>${esc(x.cup.name)}</b></div>` : ''}${x.euro ? `<div>🌍 Avrupa: <b>${esc(x.euro.name)}</b></div>` : ''}
-    ${x.top ? `<div>⚽ Gol kralı: <b>${esc(x.top.name)}</b> (${esc(x.top.team || '')}) — ${x.top.goals} gol</div>` : ''}
+    ${x.league ? `<div>Lig: <b>${esc(x.league.name)}</b></div>` : ''}${x.cup ? `<div>Kupa: <b>${esc(x.cup.name)}</b></div>` : ''}${x.euro ? `<div>Avrupa: <b>${esc(x.euro.name)}</b></div>` : ''}
+    ${x.top ? `<div>Gol kralı: <b>${esc(x.top.name)}</b> (${esc(x.top.team || '')}) — ${x.top.goals} gol</div>` : ''}
     ${x.best ? `<div>⭐ Sezonun oyuncusu: <b>${esc(x.best.name)}</b> (${esc(x.best.team || '')}) — ${x.best.rating}</div>` : ''}</section>`).join('')}`;
 }
 function renderPuan() {
   const rows = S.standings;
   $('#lBody').innerHTML = `<section class="card"><table class="tbl">
     <thead><tr><th>#</th><th class="l">Takım</th><th>O</th><th class="hide-s">G</th><th class="hide-s">B</th><th class="hide-s">M</th><th class="hide-s">A</th><th class="hide-s">Y</th><th>AV</th><th class="hide-s">Form</th><th>P</th></tr></thead>
-    <tbody>${rows.map((r, i) => `<tr class="${r.team_id === me()?.id ? 'mine' : ''}"><td>${i + 1}</td><td class="l">${teamDot(S.teamById.get(r.team_id) || r)} ${esc(r.name)}${S.teamById.get(r.team_id)?.is_bot ? ' 🤖' : ''}</td><td>${r.o}</td>
+    <tbody>${rows.map((r, i) => `<tr class="${r.team_id === me()?.id ? 'mine' : ''}"><td>${i + 1}</td><td class="l">${teamDot(S.teamById.get(r.team_id) || r)} ${esc(r.name)}${S.teamById.get(r.team_id)?.is_bot ? ' <small>YZ</small>' : ''}</td><td>${r.o}</td>
       <td class="hide-s">${r.w}</td><td class="hide-s">${r.d}</td><td class="hide-s">${r.l}</td><td class="hide-s">${r.gf}</td><td class="hide-s">${r.ga}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="hide-s">${formHTML(formOf(r.team_id))}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody>
   </table></section>`;
 }
@@ -1568,7 +1582,7 @@ function renderAvrupa() {
     </section>`;
   }).join('');
   $('#lBody').innerHTML = `
-  ${e.champion ? `<section class="card champ">🌍🏆 Avrupa şampiyonu: <b>${esc(tname(e.champion))}</b></section>` : ''}
+  ${e.champion ? `<section class="card champ">${icon('cup', 20)} Avrupa şampiyonu: <b>${esc(tname(e.champion))}</b></section>` : ''}
   <section class="card"><p class="small muted">16 takım: ligimizin en iyileri ve Avrupa'nın devleri. Gruplarda ilk 2 çeyrek finale çıkar; çeyrek ve yarı final rövanşlı, final tek maç.
     ${inIt ? 'Her tur ek gelir: katılım, çeyrek final, yarı final, final ve şampiyonluk primi; iç saha biletleri 2.5 kat.' : 'Bu sezon Avrupa\'da değilsin — ligi ilk sıralarda bitirirsen gelecek sezon sen de buradasın.'}</p></section>
   ${ko}${groups}`;
@@ -1580,7 +1594,7 @@ function renderKupa() {
   const maxR = rounds.length ? Math.max(...rounds) : 0;
   const rName = (r) => { const n = new Set(cf.filter((f) => f.cup_round === r).flatMap((f) => [f.home, f.away])).size; return n === 2 && cup.champion ? 'Final' : n === 2 && r === maxR && (cup.alive || []).length <= 2 ? 'Final' : n === 4 ? 'Yarı final' : n === 8 ? 'Çeyrek final' : `${r}. tur`; };
   $('#lBody').innerHTML = `
-  ${cup.champion ? `<section class="card champ">🏆 Kupa şampiyonu: <b>${esc(tname(cup.champion))}</b></section>` : ''}
+  ${cup.champion ? `<section class="card champ">${icon('cup', 20)} Kupa şampiyonu: <b>${esc(tname(cup.champion))}</b></section>` : ''}
   ${rounds.map((r) => {
     const ties = [...new Set(cf.filter((f) => f.cup_round === r).map((f) => f.tie))];
     return `<section class="card"><h3>${rName(r)}</h3>${ties.map((tie) => tieBox(cf.filter((f) => f.cup_round === r && f.tie === tie).sort((a, b) => a.leg - b.leg))).join('')}</section>`;
